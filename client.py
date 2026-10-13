@@ -2,8 +2,10 @@
 Mini Banking Client
 Connects to the server VM by real IP (NOT localhost).
 
+Put SERVER_URL in a .env file next to this script, e.g.:
+  SERVER_URL=http://192.168.56.10:8000
+
 Usage examples (on client VM):
-  export SERVER_URL="http://192.168.56.10:8000"
   python client.py balance A1001
   python client.py deposit A1001 100
   python client.py withdraw A1001 50
@@ -22,6 +24,9 @@ import threading
 from typing import Any, Optional
 
 import requests
+from dotenv import load_dotenv
+
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
 SERVER_URL = os.getenv("SERVER_URL", "http://127.0.0.1:8000").rstrip("/")
 
@@ -204,8 +209,8 @@ def main() -> int:
     except requests.RequestException as exc:
         print(f"ERROR: cannot reach server at {SERVER_URL}")
         print(f"  {exc}")
-        print("Set the real server VM IP, e.g.:")
-        print('  export SERVER_URL="http://192.168.56.10:8000"')
+        print("Set the real server VM IP in .env, e.g.:")
+        print("  SERVER_URL=http://192.168.56.10:8000")
         return 1
 
     if args.cmd == "balance":

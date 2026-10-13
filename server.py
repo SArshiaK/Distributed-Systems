@@ -19,12 +19,16 @@ from decimal import Decimal, InvalidOperation
 from typing import Any, Optional
 
 import psycopg
+from dotenv import load_dotenv
 from psycopg.rows import dict_row
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
+
+# Load settings from .env next to this file (no need for export)
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
 
 # ---------------------------------------------------------------------------
@@ -37,6 +41,8 @@ DATABASE_URL = os.getenv(
 )
 MAX_CLIENTS = int(os.getenv("MAX_CLIENTS", "20"))
 LOG_FILE = os.getenv("LOG_FILE", "bank_server.log")
+HOST = os.getenv("HOST", "0.0.0.0")
+PORT = int(os.getenv("PORT", "8000"))
 
 # Limits how many transaction handlers run at the same time
 _client_slots = threading.Semaphore(MAX_CLIENTS)
@@ -128,7 +134,7 @@ def on_startup() -> None:
             cur.execute("SELECT 1")
     logger.info(
         f"{utc_now()}  server_start  max_clients={MAX_CLIENTS}  "
-        f"db=connected  listening=0.0.0.0:8000"
+        f"db=connected  listening={HOST}:{PORT}"
     )
 
 
@@ -408,4 +414,4 @@ if __name__ == "__main__":
     import uvicorn
 
     # IMPORTANT: workers=1 (default). Do NOT use --workers > 1 for this assignment demo.
-    uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=False)
+    uvicorn.run("server:app", host=HOST, port=PORT, reload=False)
