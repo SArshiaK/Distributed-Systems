@@ -18,8 +18,8 @@ from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any, Optional
 
-import psycopg2
-from psycopg2.extras import RealDictCursor
+import psycopg
+from psycopg.rows import dict_row
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -88,20 +88,16 @@ def write_log(
 # ---------------------------------------------------------------------------
 
 def get_connection():
-    return psycopg2.connect(DATABASE_URL)
+    return psycopg.connect(DATABASE_URL, row_factory=dict_row)
 
 
 @contextmanager
 def db_transaction():
     """One DB transaction: BEGIN on enter, COMMIT on success, ROLLBACK on error."""
-    conn = get_connection()
-    try:
-        # psycopg2 starts a transaction automatically; we commit/rollback explicitly
-        with conn:
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with get_connection() as conn:
+        with conn.transaction():
+            with conn.cursor() as cur:
                 yield cur
-    finally:
-        conn.close()
 
 
 # ---------------------------------------------------------------------------
