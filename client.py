@@ -27,7 +27,10 @@ import requests
 
 from envfile import load_env_file
 
-load_env_file(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# Prefer .env; also accept .env.client if that is what you edited
+load_env_file(os.path.join(_BASE_DIR, ".env"))
+load_env_file(os.path.join(_BASE_DIR, ".env.client"))
 
 SERVER_URL = os.getenv("SERVER_URL", "http://127.0.0.1:8000").rstrip("/")
 
