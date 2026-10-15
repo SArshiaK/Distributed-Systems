@@ -1,9 +1,12 @@
 """
 Mini Banking Client
 Connects to the server VM by real IP (NOT localhost).
+Supports failover to backup server for high availability.
 
-Put SERVER_URL in a .env file next to this script, e.g.:
+Put SERVER_URL or SERVER_URLS in a .env file next to this script, e.g.:
   SERVER_URL=http://192.168.56.10:8000
+  # or for failover:
+  SERVER_URLS=http://192.168.56.10:8000,http://192.168.56.11:8000
 
 Usage examples (on client VM):
   python client.py balance A1001
@@ -12,6 +15,7 @@ Usage examples (on client VM):
   python client.py demo
   python client.py stress A1001 20 10
   python client.py errors
+  python client.py failover-demo A1001
 """
 
 from __future__ import annotations
@@ -21,6 +25,7 @@ import json
 import os
 import sys
 import threading
+import time
 from typing import Any, Optional
 
 import requests
@@ -32,7 +37,16 @@ _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 load_env_file(os.path.join(_BASE_DIR, ".env"))
 load_env_file(os.path.join(_BASE_DIR, ".env.client"))
 
-SERVER_URL = os.getenv("SERVER_URL", "http://127.0.0.1:8000").rstrip("/")
+# Support multiple servers for failover
+_server_urls_str = os.getenv("SERVER_URLS", "")
+if _server_urls_str:
+    SERVER_URLS = [url.strip().rstrip("/") for url in _server_urls_str.split(",")]
+else:
+    # Fallback to single SERVER_URL
+    SERVER_URLS = [os.getenv("SERVER_URL", "http://127.0.0.1:8000").rstrip("/")]
+
+# For backward compatibility
+SERVER_URL = SERVER_URLS[0]
 
 
 def call(
@@ -41,27 +55,44 @@ def call(
     amount: Optional[Any] = None,
     timeout: float = 10.0,
 ) -> dict:
+    """
+    Send a transaction request with automatic failover.
+    Tries each server in SERVER_URLS until one responds.
+    """
     payload: dict[str, Any] = {"action": action, "account": account}
     if amount is not None:
         payload["amount"] = amount
 
-    url = f"{SERVER_URL}/transaction"
-    try:
-        resp = requests.post(url, json=payload, timeout=timeout)
-    except requests.RequestException as exc:
-        return {"status": "error", "message": f"connection failed: {exc}"}
-
-    try:
-        data = resp.json()
-    except ValueError:
-        return {
-            "status": "error",
-            "message": f"non-JSON response (HTTP {resp.status_code})",
-            "raw": resp.text[:300],
-        }
-
-    data["_http_status"] = resp.status_code
-    return data
+    last_error = None
+    
+    for server_url in SERVER_URLS:
+        url = f"{server_url}/transaction"
+        try:
+            resp = requests.post(url, json=payload, timeout=timeout)
+            
+            try:
+                data = resp.json()
+            except ValueError:
+                data = {
+                    "status": "error",
+                    "message": f"non-JSON response (HTTP {resp.status_code})",
+                    "raw": resp.text[:300],
+                }
+            
+            data["_http_status"] = resp.status_code
+            data["_server"] = server_url  # track which server responded
+            return data
+            
+        except requests.RequestException as exc:
+            last_error = f"connection failed: {exc}"
+            continue  # try next server
+    
+    # All servers failed
+    return {
+        "status": "error",
+        "message": f"all servers unreachable: {last_error}",
+        "_attempted_servers": SERVER_URLS,
+    }
 
 
 def print_result(title: str, data: dict) -> None:
@@ -174,6 +205,31 @@ def cmd_stress(account: str, clients: int, amount: float) -> None:
     print("OK — matches serial expectation" if abs(end_bal - expected) < 0.001 else "MISMATCH!")
 
 
+def cmd_failover_demo(account: str) -> None:
+    """
+    Demonstrate automatic failover between servers.
+    Keep sending requests while you manually kill Server A.
+    """
+    print(f"Configured servers: {SERVER_URLS}")
+    print(f"\nStarting continuous requests to {account}...")
+    print("Kill Server A during this test to see automatic failover.\n")
+    
+    for i in range(20):
+        result = call("balance", account)
+        server = result.get("_server", "unknown")
+        status = result.get("status", "unknown")
+        balance = result.get("balance", "N/A")
+        
+        print(f"Request {i+1:2d}: {status:8s} balance={balance:8} server={server}")
+        
+        if status != "success":
+            print(f"           Error: {result.get('message', 'unknown')}")
+        
+        time.sleep(1)  # 1 second between requests
+    
+    print("\nFailover demo complete.")
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Mini Banking Client")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -197,6 +253,9 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("clients", type=int, help="Number of concurrent clients")
     s.add_argument("amount", type=float, help="Withdraw amount per client")
 
+    f = sub.add_parser("failover-demo", help="Demonstrate automatic failover")
+    f.add_argument("account")
+
     return p
 
 
@@ -204,17 +263,22 @@ def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
 
-    print(f"Using SERVER_URL={SERVER_URL}")
+    print(f"Configured servers: {SERVER_URLS}")
 
-    # Quick connectivity check
-    try:
-        h = requests.get(f"{SERVER_URL}/health", timeout=5)
-        print(f"Health: HTTP {h.status_code} {h.text}")
-    except requests.RequestException as exc:
-        print(f"ERROR: cannot reach server at {SERVER_URL}")
-        print(f"  {exc}")
-        print("Set the real server VM IP in .env, e.g.:")
-        print("  SERVER_URL=http://192.168.56.10:8000")
+    # Quick connectivity check for all servers
+    reachable = []
+    for server_url in SERVER_URLS:
+        try:
+            h = requests.get(f"{server_url}/health", timeout=5)
+            print(f"✓ {server_url}: HTTP {h.status_code}")
+            reachable.append(server_url)
+        except requests.RequestException as exc:
+            print(f"✗ {server_url}: unreachable ({exc})")
+    
+    if not reachable and args.cmd != "failover-demo":
+        print("\nERROR: No servers reachable!")
+        print("Set server IPs in .env, e.g.:")
+        print("  SERVER_URLS=http://192.168.56.10:8000,http://192.168.56.11:8000")
         return 1
 
     if args.cmd == "balance":
@@ -229,6 +293,8 @@ def main() -> int:
         cmd_errors()
     elif args.cmd == "stress":
         cmd_stress(args.account, args.clients, args.amount)
+    elif args.cmd == "failover-demo":
+        cmd_failover_demo(args.account)
     else:
         parser.print_help()
         return 1

@@ -4,6 +4,7 @@ Mini Banking Transaction Server
 - PostgreSQL for durable shared state + ACID
 - Concurrent clients with row-level locks (SELECT ... FOR UPDATE)
 - Configurable MAX_CLIENTS via environment variable
+- Quorum-based primary election to prevent split brain
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
+import requests
 
 from envfile import load_env_file
 
@@ -44,6 +46,12 @@ MAX_CLIENTS = int(os.getenv("MAX_CLIENTS", "20"))
 LOG_FILE = os.getenv("LOG_FILE", "bank_server.log")
 HOST = os.getenv("HOST", "0.0.0.0")
 PORT = int(os.getenv("PORT", "8000"))
+
+# Quorum configuration for split-brain prevention
+WITNESS_URL = os.getenv("WITNESS_URL", "")  # e.g., http://192.168.56.12:9000
+PEER_SERVER_URL = os.getenv("PEER_SERVER_URL", "")  # e.g., http://192.168.56.11:8000
+QUORUM_TIMEOUT = float(os.getenv("QUORUM_TIMEOUT", "2.0"))  # seconds
+ENABLE_QUORUM = os.getenv("ENABLE_QUORUM", "false").lower() == "true"
 
 # Limits how many transaction handlers run at the same time
 _client_slots = threading.Semaphore(MAX_CLIENTS)
@@ -108,6 +116,49 @@ def db_transaction():
 
 
 # ---------------------------------------------------------------------------
+# Quorum check for split-brain prevention
+# ---------------------------------------------------------------------------
+
+def has_quorum() -> bool:
+    """
+    Check if this server has quorum (majority of nodes reachable).
+    Quorum = 2 out of 3 nodes (self + witness + peer).
+    If quorum is disabled, always return True.
+    """
+    if not ENABLE_QUORUM:
+        return True
+    
+    reachable = 1  # self is always reachable
+    
+    # Check witness
+    if WITNESS_URL:
+        try:
+            resp = requests.get(
+                f"{WITNESS_URL.rstrip('/')}/ping",
+                timeout=QUORUM_TIMEOUT,
+            )
+            if resp.status_code == 200:
+                reachable += 1
+        except requests.RequestException:
+            pass
+    
+    # Check peer server
+    if PEER_SERVER_URL:
+        try:
+            resp = requests.get(
+                f"{PEER_SERVER_URL.rstrip('/')}/health",
+                timeout=QUORUM_TIMEOUT,
+            )
+            if resp.status_code == 200:
+                reachable += 1
+        except requests.RequestException:
+            pass
+    
+    # Need 2 out of 3 for quorum
+    return reachable >= 2
+
+
+# ---------------------------------------------------------------------------
 # Request / response models
 # ---------------------------------------------------------------------------
 
@@ -142,6 +193,26 @@ def on_startup() -> None:
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
+
+
+@app.get("/quorum-status")
+def quorum_status() -> dict:
+    """Check current quorum status."""
+    if not ENABLE_QUORUM:
+        return {
+            "quorum_enabled": False,
+            "has_quorum": True,
+            "mode": "standalone",
+        }
+    
+    has_q = has_quorum()
+    return {
+        "quorum_enabled": True,
+        "has_quorum": has_q,
+        "mode": "primary" if has_q else "read-only",
+        "witness_url": WITNESS_URL or None,
+        "peer_url": PEER_SERVER_URL or None,
+    }
 
 
 def _client_ip(request: Request) -> str:
@@ -219,6 +290,26 @@ def transaction(body: TransactionRequest, request: Request):
                 latency_ms=latency,
             )
             return _error("error", f"unsupported action: {body.action}", 400, account)
+
+        # Quorum check for write operations (deposit/withdraw)
+        if action in {"deposit", "withdraw"}:
+            if not has_quorum():
+                latency = (time.perf_counter() - started) * 1000
+                write_log(
+                    request_id=request_id,
+                    client_ip=client_ip,
+                    action=action,
+                    account=account,
+                    result="error:no_quorum",
+                    latency_ms=latency,
+                    extra="read-only mode: network partition detected",
+                )
+                return _error(
+                    "error",
+                    "no quorum: server in read-only mode due to network partition",
+                    503,
+                    account,
+                )
 
         try:
             with db_transaction() as cur:

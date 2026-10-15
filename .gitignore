@@ -39,3 +39,7 @@ Thumbs.db
 htmlcov/
 .mypy_cache/
 .ruff_cache/
+.swarm/
+.env.swarm
+venv.swarm/
+venv
