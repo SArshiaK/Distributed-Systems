@@ -81,6 +81,12 @@ def call(
             
             data["_http_status"] = resp.status_code
             data["_server"] = server_url  # track which server responded
+
+            # If server is busy or in read-only / no-quorum mode (503), failover to next server
+            if resp.status_code in (502, 503, 504):
+                last_error = f"{server_url} returned {resp.status_code}: {data.get('message', '')}"
+                continue
+
             return data
             
         except requests.RequestException as exc:

@@ -106,6 +106,22 @@ def get_connection():
     return psycopg.connect(DATABASE_URL, row_factory=dict_row)
 
 
+def ensure_primary_db() -> None:
+    """If DB is in standby/replica mode, promote it to primary so writes succeed."""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT pg_is_in_recovery()")
+                row = cur.fetchone()
+                if row and row.get("pg_is_in_recovery"):
+                    logger.info("Replica detected: promoting database to primary...")
+                    cur.execute("SELECT pg_promote()")
+                    conn.commit()
+                    time.sleep(0.5)
+    except Exception as exc:
+        logger.warning(f"Could not promote DB (may already be primary or permission issue): {exc}")
+
+
 @contextmanager
 def db_transaction():
     """One DB transaction: BEGIN on enter, COMMIT on success, ROLLBACK on error."""
@@ -310,26 +326,32 @@ def transaction(body: TransactionRequest, request: Request):
                     503,
                     account,
                 )
+            # Ensure DB is promoted if this replica took over as primary
+            ensure_primary_db()
 
         try:
             with db_transaction() as cur:
-                # Lock the row so concurrent ops on same account are serialized (Isolation)
-                cur.execute(
-                    "SELECT account_id, balance FROM accounts WHERE account_id = %s FOR UPDATE",
-                    (account,),
-                )
-                row = cur.fetchone()
-                if row is None:
-                    # ROLLBACK happens automatically when we leave without commit... 
-                    # With `with conn:` context, raising or returning after no writes is fine.
-                    # Explicit raise to abort cleanly:
-                    raise LookupError("unknown_account")
-
-                balance = Decimal(row["balance"])
-
                 if action == "balance":
-                    result_balance = balance
+                    # Read-only query: no lock needed, works cleanly on both primary and standby
+                    cur.execute(
+                        "SELECT account_id, balance FROM accounts WHERE account_id = %s",
+                        (account,),
+                    )
+                    row = cur.fetchone()
+                    if row is None:
+                        raise LookupError("unknown_account")
+                    result_balance = Decimal(row["balance"])
                 else:
+                    # Write operation: lock the row for isolation
+                    cur.execute(
+                        "SELECT account_id, balance FROM accounts WHERE account_id = %s FOR UPDATE",
+                        (account,),
+                    )
+                    row = cur.fetchone()
+                    if row is None:
+                        raise LookupError("unknown_account")
+
+                    balance = Decimal(row["balance"])
                     amount = _parse_amount(body.amount)
 
                     if action == "deposit":
