@@ -19,7 +19,6 @@ from decimal import Decimal, InvalidOperation
 from typing import Any, Optional
 
 import psycopg
-from dotenv import load_dotenv
 from psycopg.rows import dict_row
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -27,8 +26,10 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from envfile import load_env_file
+
 # Load settings from .env next to this file (no need for export)
-load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
+load_env_file(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
 
 # ---------------------------------------------------------------------------

@@ -24,9 +24,10 @@ import threading
 from typing import Any, Optional
 
 import requests
-from dotenv import load_dotenv
 
-load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
+from envfile import load_env_file
+
+load_env_file(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
 SERVER_URL = os.getenv("SERVER_URL", "http://127.0.0.1:8000").rstrip("/")
 
