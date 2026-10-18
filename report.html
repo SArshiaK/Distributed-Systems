@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>گزارش پروژه سیستم‌های توزیع‌شده — سرور تراکنش بانکی</title>
+<style>
+  @font-face {
+    font-family: 'Vazir';
+    src: url('./fonts/woff2/Vazir.woff2') format('woff2'),
+         url('./fonts/woff/Vazir.woff') format('woff'),
+         url('./fonts/ttf/Vazir.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+  }
+  @font-face {
+    font-family: 'Vazir';
+    src: url('./fonts/woff2/Vazir-Bold.woff2') format('woff2'),
+         url('./fonts/woff/Vazir-Bold.woff') format('woff'),
+         url('./fonts/ttf/Vazir-Bold.ttf') format('truetype');
+    font-weight: bold;
+    font-style: normal;
+  }
+  @font-face {
+    font-family: 'Vazir';
+    src: url('./fonts/woff2/Vazir-Medium.woff2') format('woff2'),
+         url('./fonts/woff/Vazir-Medium.woff') format('woff'),
+         url('./fonts/ttf/Vazir-Medium.ttf') format('truetype');
+    font-weight: 500;
+    font-style: normal;
+  }
+
+  @page {
+    size: A4;
+    margin: 1.6cm 1.5cm;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    font-family: 'Vazir', Tahoma, sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.55;
+    color: #222;
+    background: #fff;
+    margin: 0;
+    padding: 0;
+    text-align: justify;
+  }
+
+  @media screen {
+    body {
+      max-width: 21cm;
+      margin: 25px auto;
+      padding: 30px 40px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.15);
+      border-radius: 4px;
+    }
+  }
+
+  h1 {
+    font-size: 16pt;
+    font-weight: bold;
+    color: #1a365d;
+    border-bottom: 2px solid #2b6cb0;
+    padding-bottom: 8px;
+    margin-top: 0;
+    margin-bottom: 12px;
+  }
+
+  h2 {
+    font-size: 12pt;
+    font-weight: bold;
+    color: #2c5282;
+    border-bottom: 1px solid #cbd5e0;
+    padding-bottom: 4px;
+    margin-top: 14px;
+    margin-bottom: 8px;
+  }
+
+  h3 {
+    font-size: 10.5pt;
+    font-weight: bold;
+    color: #2d3748;
+    margin-top: 10px;
+    margin-bottom: 6px;
+  }
+
+  p {
+    margin: 6px 0;
+  }
+
+  ul, ol {
+    margin: 6px 0;
+    padding-right: 22px;
+  }
+
+  li {
+    margin-bottom: 4px;
+  }
+
+  code {
+    font-family: Consolas, 'Courier New', monospace;
+    font-size: 9pt;
+    background: #edf2f7;
+    padding: 1px 4px;
+    border-radius: 3px;
+    direction: ltr;
+    display: inline-block;
+  }
+
+  pre {
+    font-family: Consolas, 'Courier New', monospace;
+    font-size: 8.5pt;
+    background: #f7fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    padding: 7px 10px;
+    line-height: 1.35;
+    direction: ltr;
+    text-align: left;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    margin: 6px 0;
+  }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 9.5pt;
+    margin: 8px 0;
+  }
+
+  th, td {
+    border: 1px solid #cbd5e0;
+    padding: 5px 8px;
+    text-align: right;
+  }
+
+  th {
+    background: #ebf8ff;
+    color: #2b6cb0;
+    font-weight: bold;
+  }
+
+  tr:nth-child(even) td {
+    background: #f7fafc;
+  }
+
+  .diagram {
+    font-family: Consolas, monospace;
+    font-size: 8pt;
+    background: #2d3748;
+    color: #edf2f7;
+    border-radius: 4px;
+    padding: 8px;
+    direction: ltr;
+    text-align: left;
+    line-height: 1.25;
+    margin: 8px 0;
+    display: block;
+    width: fit-content;
+  }
+
+  .note-box {
+    background: #f0fff4;
+    border-right: 4px solid #38a169;
+    padding: 6px 10px;
+    font-size: 9.5pt;
+    margin: 8px 0;
+    border-radius: 0 4px 4px 0;
+  }
+
+  .page-break {
+    page-break-before: always;
+  }
+
+  .pdf-btn {
+    position: fixed;
+    top: 16px;
+    left: 16px;
+    background: #2b6cb0;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 10px 18px;
+    font-family: 'Vazir', Tahoma, sans-serif;
+    font-size: 11pt;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+  }
+  .pdf-btn:hover { background: #2c5282; }
+  @media print { .pdf-btn { display: none; } }
+</style>
+</head>
+<body>
+
+<button class="pdf-btn" onclick="window.print()">💾 ذخیره به‌عنوان PDF</button>
+
+<h1>گزارش پروژه: سرور تراکنش بانکی توزیع‌پذیر (Mini Banking Server)</h1>
+<p>
+این مستند، گزارش کامل طراحی، پیاده‌سازی و اعتبارسنجی سامانه تراکنش بانکی توزیع‌شده با تضمین کامل خواص ACID، مدیریت کلاینت‌های همزمان، تحمل‌پذیری در برابر خرابی با مکانیزم انتقال خودکار ترافیک (Failover با امتیاز +۱۰٪) و جلوگیری از دوپارگی مغز در زمان انقطاع شبکه بر اساس الگوریتم حدنصاب اکثریت (Split-Brain Prevention با امتیاز +۱۵٪) است.
+</p>
+
+<h2>۱. روش ارتباطی و پروتکل تبادل داده (Communication Method)</h2>
+<p>
+برای برقراری ارتباط بین ماشین‌های کلاینت و سرور، از پروتکل <strong>HTTP/1.1 با ساختار داده‌ای استاندارد JSON</strong> در بستر فریم‌ورک سبک و پرسرعت <strong>FastAPI</strong> و سرور ASGI به نام <strong>Uvicorn</strong> استفاده شده است. ماشین‌های سرور و کلاینت روی ماشین‌های مجازی (Virtual Machines) مجزا در شبکه Host-Only اجرا شده‌اند و کلاینت مستقیماً به آدرس IP واقعی سرورها متصل می‌شود (نه localhost).
+</p>
+<p>ساختار یکنواخت درخواست‌ها و پاسخ‌ها به صورت زیر است:</p>
+<pre>{ "action": "withdraw", "account": "A1001", "amount": 200 }</pre>
+<pre>{ "status": "success", "account": "A1001", "balance": 800, "request_id": "a1b2c3d4" }</pre>
+<p>پاسخ‌های خطا نیز از یک مدل استاندارد و یکپارچه همراه با کد وضعیت HTTP معنادار تبعیت می‌کنند:</p>
+<pre>{ "status": "error", "message": "insufficient funds", "account": "A1001" }</pre>
+
+<h2>۲. معماری کلاستر توزیع‌شده و نگاشت شبکه</h2>
+<p>
+کلاستر از سه ماشین مجازی لینوکسی (Ubuntu) مجزا و یک گره ناظر (Witness) روی سیستم‌عامل میزبان تشکیل شده است:
+</p>
+<ul>
+  <li><strong>Witness (گره داور/ناظر):</strong> اجرا روی هاست فیزیکی به آدرس <code>192.168.56.103:9000</code> جهت رأی‌گیری حدنصاب</li>
+  <li><strong>Server A (سرور اصلی / Primary):</strong> اجرا روی VM سرور اول به آدرس <code>192.168.56.101:8000</code></li>
+  <li><strong>Server B (سرور پشتیبان / Hot Standby):</strong> اجرا روی VM سرور دوم به آدرس <code>192.168.56.104:8000</code></li>
+  <li><strong>Client VM (کلاینت):</strong> اجرا روی VM کلاینت به آدرس <code>192.168.56.102</code></li>
+</ul>
+
+<pre class="diagram">+-----------------------------+
+|     Witness (Host Node)     |
+|       192.168.56.103        |
++--------------+--------------+
+               / \
+    Heartbeat /   \ Heartbeat
+             /     \
+            v       v
++------------------------+      +-----------+     +-----------+
+|       Client VM        | ---&gt; | Server A  | &lt;-&gt; | Server B  |
+|     192.168.56.102     | ---&gt; | (Primary) |     | (Replica) |
++------------------------+      +-----+-----+     +-----+-----+
+                                      |                 |
+                                      | Streaming Repl  |
+                                      v                 v
+                                 +-----------+     +-----------+
+                                 | Postgres  | ==&gt; | Postgres  |
+                                 |  Master   |     |  Standby  |
+                                 +-----------+     +-----------+
+</pre>
+
+<h2>۳. مدیریت کلاینت‌های همزمان (Concurrent Clients)</h2>
+<p>
+سرور به ازای هر درخواست دریافتی یک Handler در ریسه‌های مجزا اجرا می‌کند. جهت ممانعت از اشباع منابع و اضافه بار سیستم، سقف کلاینت‌های پردازش‌شونده به صورت همزمان از طریق متغیر محیطی <code>MAX_CLIENTS</code> (به عنوان پیش‌فرض ۲۰) کنترل می‌شود. این ویژگی با کمک ساختار همگام‌ساز <code>threading.Semaphore</code> بدون مسدودسازی (Non-blocking: <code>acquire(blocking=False)</code>) پیاده‌سازی شده است:
+</p>
+<ul>
+  <li>در صورتی که ظرفیت خالی موجود باشد، درخواست وارد چرخه پردازش تراکنش می‌شود.</li>
+  <li>در صورت اشباع بودن سرور، پردازش بلافاصله با کد <code>HTTP 503 (Server Busy)</code> رد شده و جزئیات آن لاگ می‌شود.</li>
+  <li>آزادسازی سهمیه سمافور در بلوک <code>finally</code> تضمین شده است؛ بنابراین حتی در صورت بروز استثناهای غیرمنتظره، هیچ اسلاتی نشت نمی‌کند.</li>
+</ul>
+
+<h2>۴. مدیریت وضعیت مشترک (Shared State Management)</h2>
+<p>
+اطلاعات حساب‌ها و موجودی آن‌ها به عنوان <strong>وضعیت مشترک (Shared State)</strong>، به هیچ وجه در متغیرهای فرار رم سرور نگهداری نمی‌شوند؛ بلکه مستقیماً در پایگاه داده رابطه‌ای <strong>PostgreSQL</strong> ذخیره می‌گردند. این معماری تضمین می‌کند که:
+</p>
+<ul>
+  <li>هر دو سرور A و B یا هر چند نود ناهمگام دیگر همواره با دسترسی به پایگاه داده، دیتای حقیقی را مشاهده کنند.</li>
+  <li>با خاموش شدن ناگهانی یا ری‌استارت کامل پردازش سرور، موجودی‌ها دست‌نخورده روی دیسک باقی بمانند.</li>
+  <li>همگام‌سازی بین سرورها به پروتکل‌های دست‌نویس متکی نبوده و با مکانیسم بهینه <strong>Streaming Replication</strong> خود پایگاه داده بر بستر ارسال مداوم لاگ‌های WAL انجام شود.</li>
+</ul>
+<pre>CREATE TABLE IF NOT EXISTS accounts (
+    account_id VARCHAR(32) PRIMARY KEY,
+    balance    NUMERIC(14, 2) NOT NULL CHECK (balance &gt;= 0)
+);</pre>
+
+<h2>۵. حفظ صحت عملیات همزمان روی یک حساب (Concurrency &amp; Row-Level Locks)</h2>
+<p>
+اگر دو تراکنش واریز یا برداشت در یک میلی‌ثانیه برای حساب <code>A1001</code> دریافت شوند، چه رخ می‌دهد؟ برای جلوگیری از ناهنجاری‌های معروفی چون **Lost Update** یا **Dirty Read**، از مکانیزم قفل‌گذاری سطری (Row-Level Locking) با دستور استاندارد <code>SELECT ... FOR UPDATE</code> استفاده شده است:
+</p>
+<ol>
+  <li>تراکنش اول با دستور فوق، سطر حساب را قفل کرده و موجودی را بازخوانی می‌کند.</li>
+  <li>تراکنش دوم که به طور موازی به حساب مراجعه کرده، پشت قفل سطر در سطح پایگاه داده متوقف می‌شود.</li>
+  <li>تراکنش اول عملیات ریاضی را انجام داده، دستور <code>UPDATE</code> را ثبت کرده و تراکنش را <code>COMMIT</code> می‌کند؛ قفل آزاد می‌شود.</li>
+  <li>تراکنش دوم بلافاصله ادامه یافته و سطر را با <strong>موجودی جدید و به‌روزشده</strong> می‌خواند.</li>
+</ol>
+<p>
+در نتیجه، خروجی همواره منطبق بر یک ترتیب سریال‌پذیر (Serializability) قطعی است. در استعلام موجودی (اکشن <code>balance</code>)، جهت حذف سربار قفل‌گذاری و امکان خواندن بر روی دیتابیس‌های رپلیکای Standby، از <code>SELECT</code> ساده بدون قفل استفاده می‌شود.
+</p>
+
+<h2>۶. تضمین خواص چهارگانه تراکنش (ACID Guarantees)</h2>
+<table>
+  <thead>
+    <tr>
+      <th style="width: 18%;">ویژگی</th>
+      <th>مفهوم و راهکار تحقق در پیاده‌سازی سیستم</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Atomicity<br>(تجزیه‌ناپذیری)</strong></td>
+      <td>
+        تراکنش یا به‌طور کامل اجرا می‌شود یا هیچ اثری از آن باقی نمی‌ماند. تمامی عملیات درون یک مدیریت‌کننده کانتکست (<code>with conn.transaction():</code>) اجرا می‌شوند. در صورت بروز هرگونه خطای منطقی (موجودی ناکافی، حساب ناموجود) یا کرش میانه راه، وضعیت به طور خودکار به نقطه آغاز <code>ROLLBACK</code> می‌شود.
+      </td>
+    </tr>
+    <tr>
+      <td><strong>Consistency<br>(سازگاری)</strong></td>
+      <td>
+        حساب‌ها هرگز وضعیت نامعتبر نمی‌گیرند. این شرط در دو لایه پیاده شده است: قید سیستمی <code>CHECK (balance &gt;= 0)</code> در سطح دیتابیس و اعتبارسنجی دقیق مقدار عددی ورودی با نوع داده دقیق <code>Decimal</code> (مبالغ باید مثبت و حداکثر دو رقم اعشار باشند). هیچ پولی خلق یا محو نمی‌شود.
+      </td>
+    </tr>
+    <tr>
+      <td><strong>Isolation<br>(جداسازی)</strong></td>
+      <td>
+        تراکنش‌های همزمان نمی‌توانند دیتای ناتمام یکدیگر را ببینند. با بهره‌گیری از قفل‌گذاری سطری <code>SELECT ... FOR UPDATE</code> در سطح ایزولاسیون استاندارد Read Committed، تداخل‌های همزمانی کاملاً ایزوله شده و اجرای موازی با اجرای ترتیبی یک‌به‌یک معادل می‌گردد.
+      </td>
+    </tr>
+    <tr>
+      <td><strong>Durability<br>(ماندگاری)</strong></td>
+      <td>
+        تغییرات تأیید شده هرگز از بین نمی‌روند. تراکنش قبل از اینکه پاسخ HTTP 200 به سمت کلاینت بازگردد، روی Write-Ahead Log (WAL) دیسک پایگاه داده <code>COMMIT</code> می‌شود. در صورت قطع برق یا کشته شدن پروسه سرور بلافاصله پس از پاسخ، داده‌ها سالم بازخوانی می‌شوند.
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="page-break"></div>
+
+<h2>۷. تحمل‌پذیری در برابر خرابی و Failover خودکار (+۱۰٪ بونوس)</h2>
+<p>
+در سناریوی پیشرفته، سامانه به گونه‌ای طراحی شده که با متوقف شدن یا سوختن ناگهانی سرور اصلی (Server A)، کلاینت‌ها بدون کوچک‌ترین وقفه به سرویس‌دهی ادامه دهند:
+</p>
+<ul>
+  <li><strong>پایگاه داده همگام (Streaming Replication):</strong> دیتابیس سرور B با ابزار <code>pg_basebackup</code> به عنوان رپلیکای بلادرنگ سرور A راه‌اندازی شده و تمام لاگ‌های تراکنش را لحظه‌ای دریافت می‌کند.</li>
+  <li><strong>انتقال شفاف سمت کلاینت (Client-Side Failover):</strong> در کلاینت لیستی از سرورها (<code>SERVER_URLS=[A, B]</code>) تعریف شده است. کلاینت همیشه ابتدا سرور A را فراخوانی می‌کند؛ در صورتی که اتصال با خطای سوکت، Timeout، یا کدهای خطای سرور ۵۰۲/۵۰۳/۵۰۴ مواجه شود، بلافاصله در همان متد <code>call()</code> درخواست را به سرور B هدایت می‌کند.</li>
+  <li><strong>ارتقای خودکار پایگاه داده (Automatic Promotion):</strong> سرور B حین دریافت تراکنش‌های نوشتن به عنوان سرور لیدر، وضعیت دیتابیس را بررسی می‌کند؛ اگر دیتابیس در حالت Standby باشد، با دستور سیستمی <code>pg_promote()</code> آن را بدون نیاز به مداخله دست به Master ارتقا می‌دهد تا تراکنش‌های واریز/برداشت با موفقیت درج شوند.</li>
+</ul>
+
+<h2>۸. مقابله با انقطاع شبکه و جلوگیری از دوپارگی مغز (+۱۵٪ بونوس)</h2>
+<p>
+<strong>مسئله Split-Brain:</strong> اگر کابل یا شبکه ارتباطی میان Server A و Server B قطع شود، اما هر دو ماشین روشن بمانند، ممکن است هر دو سرور تصور کنند طرف مقابل مرده است و خود را سرور اصلی پندارند. در این حالت، کلاینت‌ها روی هر دو سرور تراکنش ثبت کرده و موجودی حساب‌ها دچار انشعاب و تناقض اصلاح‌ناپذیر می‌شود.
+</p>
+<p>
+<strong>راهکار مبتنی بر حدنصاب اکثریت (Quorum-Based Consensus):</strong> یک کلاستر ۳ عضوی تعریف شده است: <code>[Server A, Server B, Witness]</code>. حدنصاب لازم برای تصمیم‌گیری و ثبت تراکنش، اکثریت مطلق است:
+</p>
+<pre style="text-align:center; direction:ltr;">Quorum = floor(N / 2) + 1 = 2 out of 3 votes</pre>
+<p>
+قبل از اجرای هر عملیات واریز یا برداشت، تابع <code>has_quorum()</code> وضعیت اتصال با دو عضو دیگر را در بازه ۲ ثانیه‌ای می‌سنجد:
+</p>
+<ul>
+  <li><strong>سمت اکثریت:</strong> سروری که به گره Witness متصل است (۲ رأی از ۳ رأی)، حدنصاب داشته و تراکنش‌های نوشتن را می‌پذیرد.</li>
+  <li><strong>سمت اقلیت:</strong> سروری که ایزوله شده (۱ رأی از ۳ رأی)، سریعاً به حالت <strong>فقط‌خواندنی (Read-Only)</strong> تغییر وضعیت می‌دهد و درخواست‌های نوشتن را با خطای <code>HTTP 503 (no quorum: read-only mode)</code> ریجکت می‌کند تا از دوپارگی اطلاعات ممانعت شود. استعلام موجودی (<code>balance</code>) همچنان روی این سرور بدون خطا پاسخ داده می‌شود.</li>
+  <li><strong>همگام‌سازی پس از بازگشت شبکه (Healing):</strong> پس از برطرف شدن قطعی شبکه، replication دیتابیس ادامه‌ی لاگ‌های WAL را دریافت کرده و هر دو نود به توازن کامل بازمی‌گردند. بر مبنای قضیه CAP، در زمان پارتیشن، مدل سازگاری بر دسترسی‌پذیری ترجیح داده شده است (CP).</li>
+</ul>
+
+<h2>۹. مدیریت جامع خطاها و لاگ‌گیری استاندارد (Error Handling &amp; Logging)</h2>
+<p>
+تمامی خطاهای تعیین‌شده در مشخصات پروژه به شیوه‌ای امن و بدون توقف سرویس پردازش می‌شوند:
+</p>
+<table>
+  <thead>
+    <tr>
+      <th>نوع خطا</th>
+      <th>کد HTTP</th>
+      <th>پیام نمونه / شیوه کنترل</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>Unknown account (حساب ناموجود)</td><td>404</td><td><code>unknown account: Z9999</code> (با اعتبارسنجی جستجوی کلید)</td></tr>
+    <tr><td>Insufficient funds (کسری موجودی)</td><td>400</td><td><code>insufficient funds</code> (محاسبه و مقایسه در تراکنش)</td></tr>
+    <tr><td>Negative/Zero/Invalid amount</td><td>400</td><td><code>amount must be a positive number</code> (پایپ‌لاین Decimal)</td></tr>
+    <tr><td>Unsupported action (اکشن ناشناخته)</td><td>400</td><td><code>unsupported action: transfer</code> (فیلتر مقادیر مجاز)</td></tr>
+    <tr><td>Missing fields (فیلد ناقص)</td><td>400</td><td><code>missing account field</code> یا <code>missing amount field</code></td></tr>
+    <tr><td>Malformed JSON (داده خراب/بایت تصادفی)</td><td>400</td><td><code>malformed request</code> (مدیریت سراسری استثناهای FastAPI)</td></tr>
+    <tr><td>Server busy / No quorum</td><td>503</td><td>ترافیک بیش از حد یا پارتیشن شبکه (جهت هدایت کلاینت)</td></tr>
+  </tbody>
+</table>
+<p>هر درخواست با جزئیات کامل به کنسول و فایل <code>bank_server.log</code> فرستاده می‌شود:</p>
+<pre>2026-10-15T14:21:15.278Z  req=acbcbef4  ip=192.168.56.102  action=balance  account=A1001  result=success  balance=50.0  latency=40ms</pre>
+
+<h2>۱۰. راهنمای گام‌به‌گام راه‌اندازی و اجرای کدها (How to Run)</h2>
+
+<h3>۱. راه‌اندازی گره ناظر (Witness) روی سیستم هاست (ویندوز / PowerShell)</h3>
+<pre>python -m venv venv
+.\venv\Scripts\Activate.ps1
+pip install fastapi uvicorn
+python witness.py</pre>
+
+<h3>۲. راه‌اندازی Server A (سرور اصلی: <code>192.168.56.101</code>)</h3>
+<pre># نصب و تنظیم دیتابیس
+sudo apt update &amp;&amp; sudo apt install -y postgresql postgresql-contrib
+sudo -u postgres psql -c "CREATE USER bankuser WITH PASSWORD 'bankpass' SUPERUSER;"
+sudo -u postgres psql -c "CREATE DATABASE minibank OWNER bankuser;"
+sudo -u postgres psql -c "CREATE USER replicator WITH REPLICATION PASSWORD 'replicapass';"
+psql -h 127.0.0.1 -U bankuser -d minibank -f schema.sql
+
+# تنظیم pg_hba.conf و postgresql.conf برای گوش دادن به شبکه و فعال‌سازی replication
+sudo systemctl restart postgresql
+
+# اجرای برنامه پایتون در محیط venv
+python3 -m venv venv &amp;&amp; source venv/bin/activate
+pip install -r requirements.txt
+# تنظیم فایل .env با آدرس‌های DATABASE_URL، WITNESS_URL و PEER_SERVER_URL
+python server.py</pre>
+
+<h3>۳. راه‌اندازی Server B (سرور پشتیبان: <code>192.168.56.104</code>)</h3>
+<pre># کلون‌گیری نسخه اولیه از سرور اصلی برای راه‌اندازی Replica
+sudo systemctl stop postgresql
+sudo rm -rf /var/lib/postgresql/18/main/*
+sudo -u postgres pg_basebackup -h 192.168.56.101 -U replicator -D /var/lib/postgresql/18/main -Fp -Xs -P -R
+# تنظیم hot_standby = on در postgresql.conf
+sudo systemctl start postgresql
+
+# اجرای سرور B
+python3 -m venv venv &amp;&amp; source venv/bin/activate
+pip install -r requirements.txt
+python server.py</pre>
+
+<h3>۴. اجرای دستورات کلاینت روی ماشین Client VM (<code>192.168.56.102</code>)</h3>
+<pre>python3 -m venv venv &amp;&amp; source venv/bin/activate
+pip install -r requirements.txt
+
+# تست استعلام موجودی، واریز و برداشت
+python client.py balance A1001
+python client.py deposit A1001 100
+python client.py withdraw A1001 50
+
+# اجرای تست تمام حالات خطا
+python client.py errors
+
+# تست استرس و همزمانی بالا (۲۰ کلاینت همزمان)
+python client.py stress A1001 20 10
+
+# دمو انتقال خودکار ترافیک در حین قطع سرور اصلی
+python client.py failover-demo A1001</pre>
+
+<h2>۱۱. نتایج آزمون‌ها و اعتبارسنجی ویدیو</h2>
+<ul>
+  <li><strong>آزمون عملیات عادی:</strong> کلیه عملیات استعلام، واریز و برداشت با خروجی‌های معتبر عددی انجام شدند.</li>
+  <li><strong>آزمون همزمانی (Stress):</strong> با اجرای ۲۰ برداشت همزمان، خروجی <code>OK — matches serial expectation</code> دریافت شد که درستی قفل سطری را اثبات نمود.</li>
+  <li><strong>آزمون Atomicity و Durability:</strong> برداشت ناموفق ۹۹۹۹۹۹ تومانی وضعیت حساب را تغییر نداد، و با کرش دادن سرور و استارت مجدد، کلیه مانده‌ها از روی دیسک دقیق بازخوانی شدند.</li>
+  <li><strong>آزمون Failover خودکار (+۱۰٪):</strong> حین اجرای حلقه مداوم ۲ requests در ثانیه، سرور A کشته شد؛ کلاینت در درخواست بعدی بدون وقفه به سرور B وصل شد و ادامه داد.</li>
+  <li><strong>آزمون انقطاع شبکه (+۱۵٪):</strong> ارتباط با iptables مسدود گردید؛ سرور ایزوله‌شده فاقد حدنصاب تشخیص داده شد و به حالت Read-Only رفت و خطای ۵۰۳ داد، در حالی که سرور واجد حدنصاب به کار ادامه داد و پس از اتصال، دیتابیس‌ها به شکل سازگار همگام شدند.</li>
+</ul>
+
+</body>
+</html>
