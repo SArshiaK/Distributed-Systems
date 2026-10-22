@@ -74,6 +74,23 @@ Before every write (`deposit`/`withdraw`), `has_quorum()` checks reachability of
 
 **Known limitation and the lease upgrade.** Reachability counting is not a true leader election: if only the A-B link is cut while both servers can still reach the witness, each side counts `self + witness = 2` and both would believe they are primary. An optional, stronger mode fixes this (`ENABLE_LEASE=true`). The witness then acts as an arbiter that grants an exclusive, time-bounded lease to a single node (`/lease/acquire`, `/lease/renew`, `/lease/release`). A server writes only while it holds a valid lease and demotes itself to read-only when the lease is refused or expires, so two primaries can never write at the same time. The trade-off is fail-closed behaviour: if the witness is unreachable, writes stop until a lease can be obtained again.
 
+### 2.5. Recovering the Node That Came Back
+
+Once B is promoted, A is still a primary but holds an older history. Streaming replication is one-way, so nothing flows between two primaries: the databases stay divergent and replication remains down until A is rebuilt as a standby. This is expected PostgreSQL behaviour, not a bug.
+
+The server detects this situation automatically. Every few seconds it compares its own role and PostgreSQL timeline (`pg_control_checkpoint().timeline_id`) with the peer's `/db-role` output. If both report `primary`, the node with the **lower timeline** is the stale one. That node refuses every request with HTTP 503 and logs a repair hint, so clients fail over to the current primary instead of reading old balances. In addition, `ensure_primary_db()` never promotes a standby while the peer is a live primary; this prevents a transient client failover (for example on `503 server busy`) from creating a second primary by accident.
+
+Recovery is a single command on the node that came back:
+
+```bash
+sudo bash rejoin_as_replica.sh
+```
+
+The script verifies that the peer really is a primary before touching any data, stops local PostgreSQL, keeps the old data directory as `<PGDATA>.stale-<timestamp>`, re-clones with `pg_basebackup -R`, rewrites `primary_conninfo`, starts the node as a standby and waits until `pg_stat_wal_receiver.status = streaming`. Afterwards the client's first URL (A) again serves reads, writes are answered with 503 and automatically retried on B, and replication flows from B back to A.
+
+Required once on Server B so it can act as a primary: the two `pg_hba.conf` lines shown in section 3.3.
+
+
 
 ---
 
@@ -161,6 +178,14 @@ sudo -u postgres pg_basebackup -h 192.168.56.101 -U replicator -D /var/lib/postg
 sudo bash -c 'cat >> /etc/postgresql/*/main/postgresql.conf << EOF
 listen_addresses = '\''*'\''
 hot_standby = on
+wal_level = replica
+max_wal_senders = 5
+EOF'
+
+# Allow the other node to use this server as a primary later (reverse replication)
+sudo bash -c 'cat >> /etc/postgresql/*/main/pg_hba.conf << EOF
+host    replication     replicator      192.168.56.101/32       md5
+host    minibank        bankuser        192.168.56.0/24         md5
 EOF'
 
 sudo systemctl start postgresql

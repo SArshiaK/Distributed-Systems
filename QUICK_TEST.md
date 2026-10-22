@@ -24,6 +24,44 @@ Ctrl+C
 - هیچ transaction گم نمیشه
 - Balance صحیح میمونه
 
+### بازگرداندن Server A به‌عنوان replica (بدون قطعی replication)
+
+پس از اینکه B ارتقا یافت، A دیگر Master معتبر نیست. برنامه به‌طور خودکار این را
+تشخیص می‌دهد و روی A همهٔ درخواست‌ها را با `503 stale primary` رد می‌کند.
+
+```bash
+# روی Server B — یک‌بار: اجازهٔ replication به A
+sudo bash -c 'cat >> /etc/postgresql/*/main/pg_hba.conf << EOF
+host    replication     replicator      192.168.56.101/32       md5
+host    minibank        bankuser        192.168.56.0/24         md5
+EOF'
+sudo systemctl reload postgresql
+
+# روی Server A — برنامه را ببند، سپس:
+sudo bash rejoin_as_replica.sh
+```
+
+اسکریپت به‌طور خودکار:
+1. تأیید می‌کند B واقعاً primary است،
+2. دیتابیس قدیمی A را با نام `<PGDATA>.stale-<timestamp>` کنار می‌گذارد،
+3. با `pg_basebackup -R` از B کلون می‌گیرد،
+4. A را به‌صورت standby بالا می‌آورد و منتظر `streaming` می‌ماند.
+
+بررسی نهایی:
+
+```bash
+# روی Server A
+sudo -u postgres psql -tAc "SELECT pg_is_in_recovery()"      # باید t باشد
+sudo -u postgres psql -c "SELECT status FROM pg_stat_wal_receiver;"  # streaming
+
+# روی Server B
+sudo -u postgres psql -c "SELECT client_addr, state FROM pg_stat_replication;"
+# باید 192.168.56.101 | streaming باشد
+
+# سپس برنامه را دوباره روی A بالا بیاور
+source venv/bin/activate && python3 server.py
+```
+
 ---
 
 ## بخش ۱۵٪: Network Partition (Split Brain Prevention)

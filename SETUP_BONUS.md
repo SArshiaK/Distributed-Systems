@@ -74,7 +74,8 @@ sudo -u postgres psql
 ```
 
 ```sql
-CREATE USER bankuser WITH PASSWORD 'bankpass';
+-- SUPERUSER لازم است تا برنامه‌ی سرور بتواند timeline پایگاه‌داده را بخواند
+CREATE USER bankuser WITH PASSWORD 'bankpass' SUPERUSER;
 CREATE DATABASE minibank OWNER bankuser;
 
 -- برای replication
@@ -147,6 +148,8 @@ hot_standby = on
 ```
 host    minibank    bankuser    127.0.0.1/32      md5
 host    minibank    bankuser    192.168.56.0/24   md5
+# لازم برای وقتی که این سرور primary می‌شود و سرور A باید به آن وصل شود
+host    replication replicator  192.168.56.10/32  md5
 ```
 
 ### 6. Start PostgreSQL
@@ -257,6 +260,36 @@ sudo iptables -F
 **تست بعد از reconnect:**
 ```bash
 python client.py balance A1001  # هر دو server یک عدد رو نشون میدن
+```
+
+---
+
+## بازگشت Server A به کلاستر (Rejoin)
+
+پس از اینکه B ارتقا یافت، A یک primary قدیمی است. برنامه خودکار این را تشخیص می‌دهد
+(مقایسهٔ timeline) و روی A همهٔ درخواست‌ها را با `503 stale primary` رد می‌کند.
+برای بازگرداندن A به‌عنوان رپلیکا:
+
+```bash
+# روی Server A — ابتدا برنامه را ببندید (Ctrl+C)
+sudo bash rejoin_as_replica.sh
+```
+
+اسکریپت:
+1. بررسی می‌کند B واقعاً primary است،
+2. دیتابیس قدیمی A را به `<PGDATA>.stale-<timestamp>` منتقل می‌کند،
+3. با `pg_basebackup -R` از B کلون می‌گیرد،
+4. A را به‌صورت standby بالا می‌آورد و منتظر `streaming` می‌ماند.
+
+بررسی:
+```bash
+sudo -u postgres psql -tAc "SELECT pg_is_in_recovery()"               # t
+sudo -u postgres psql -c "SELECT status FROM pg_stat_wal_receiver;"  # streaming
+```
+
+سپس برنامه را دوباره اجرا کنید:
+```bash
+source venv/bin/activate && python3 server.py
 ```
 
 ---

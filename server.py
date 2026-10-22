@@ -61,6 +61,9 @@ NODE_ID = os.getenv("NODE_ID") or f"{socket.gethostname()}:{PORT}"
 LEASE_TTL = float(os.getenv("LEASE_TTL", "6.0"))  # seconds
 LEASE_RENEW_INTERVAL = float(os.getenv("LEASE_RENEW_INTERVAL", "2.0"))  # seconds
 
+# How often to compare this node's DB role/timeline with the peer's
+SPLIT_BRAIN_CHECK_INTERVAL = float(os.getenv("SPLIT_BRAIN_CHECK_INTERVAL", "3.0"))
+
 # Limits how many transaction handlers run at the same time
 _client_slots = threading.Semaphore(MAX_CLIENTS)
 
@@ -114,20 +117,46 @@ def get_connection():
     return psycopg.connect(DATABASE_URL, row_factory=dict_row)
 
 
-def ensure_primary_db() -> None:
-    """If DB is in standby/replica mode, promote it to primary so writes succeed."""
+def ensure_primary_db() -> bool:
+    """
+    Promote this DB to primary only when it is safe.
+
+    Returns True when the DB is (or has become) primary, False when promotion
+    was refused or failed. Failing closed is what stops a re-joined stale node
+    from creating a second primary.
+    """
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("SELECT pg_is_in_recovery()")
                 row = cur.fetchone()
-                if row and row.get("pg_is_in_recovery"):
-                    logger.info("Replica detected: promoting database to primary...")
-                    cur.execute("SELECT pg_promote()")
-                    conn.commit()
-                    time.sleep(0.5)
+
+        if not (row and row.get("pg_is_in_recovery")):
+            return True
+
+        # Ask the peer only after releasing the connection (it is an HTTP call).
+        peer = peer_db_role()
+        if peer and not peer.get("in_recovery"):
+            logger.warning(
+                f"refusing to promote: peer {peer.get('node')} is already primary"
+            )
+            return False
+
+        logger.info("Replica detected: promoting database to primary...")
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT pg_promote()")
+            conn.commit()
+
+        time.sleep(0.5)
+        in_recovery, _ = _local_db_identity()
+        if in_recovery:
+            logger.warning("pg_promote() did not complete; staying read-only")
+            return False
+        return True
     except Exception as exc:
-        logger.warning(f"Could not promote DB (may already be primary or permission issue): {exc}")
+        logger.warning(f"could not promote database, refusing writes: {exc}")
+        return False
 
 
 @contextmanager
@@ -183,6 +212,161 @@ def has_quorum() -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Stale-primary detection (broken replication after a failover)
+# ---------------------------------------------------------------------------
+# After B is promoted and A comes back, A is still a primary but holds an
+# older history. Replication is one-way, so nothing flows between them until
+# A is rebuilt as a standby. Until that happens A must refuse ALL traffic,
+# otherwise a client reading from A would see stale balances.
+#
+# Promotion creates a new PostgreSQL timeline. The node with the lower
+# timeline is the stale one, which lets us decide safely without a lease.
+
+_split_brain_lock = threading.Lock()
+_split_brain: dict[str, Any] = {
+    "stale": False,
+    "reason": "",
+    "in_recovery": False,
+}
+
+
+def peer_db_role() -> Optional[dict]:
+    """Fetch the peer's DB role/timeline from `/db-role`, or None if unreachable."""
+    if not PEER_SERVER_URL:
+        return None
+    try:
+        resp = requests.get(
+            f"{PEER_SERVER_URL.rstrip('/')}/db-role",
+            timeout=QUORUM_TIMEOUT,
+        )
+        if resp.status_code != 200:
+            return None
+        return resp.json()
+    except (requests.RequestException, ValueError):
+        return None
+
+
+def _local_db_identity() -> tuple[bool, int]:
+    """Return (in_recovery, timeline_id) for the local database.
+
+    `pg_control_checkpoint()` requires a superuser (or an explicit GRANT); when
+    that is unavailable the timeline is derived from the current WAL file name
+    on a primary. If both fail the timeline is 0, which keeps the comparison
+    fail-closed: two primaries on unknown timelines are both treated as stale.
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT pg_is_in_recovery()")
+            row = cur.fetchone()
+            in_recovery = bool(row["pg_is_in_recovery"])
+
+    timeline_id = 0
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT timeline_id FROM pg_control_checkpoint()")
+                tl_row = cur.fetchone()
+                timeline_id = int(tl_row["timeline_id"] or 0)
+    except Exception as exc:
+        # pg_control_checkpoint() needs a superuser (or an explicit GRANT).
+        # On a primary the timeline is also encoded in the current WAL file
+        # name, which unprivileged users may read.
+        logger.warning(f"pg_control_checkpoint unavailable ({exc}); trying WAL name")
+        if not in_recovery:
+            try:
+                with get_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "SELECT pg_walfile_name(pg_current_wal_lsn()) AS wal"
+                        )
+                        wal_row = cur.fetchone()
+                        timeline_id = int(wal_row["wal"][:8], 16)
+            except Exception as exc2:
+                logger.warning(f"could not derive timeline from WAL name: {exc2}")
+
+    return in_recovery, timeline_id
+
+
+def _check_split_brain() -> None:
+    """Detect two primaries and mark the older-timeline node as stale."""
+    try:
+        in_recovery, local_tl = _local_db_identity()
+    except Exception as exc:
+        logger.warning(f"split-brain check could not read local DB role: {exc}")
+        return
+
+    stale = False
+    reason = ""
+
+    if in_recovery:
+        # Rebuilt as a replica: it can no longer be a stale primary.
+        stale = False
+    elif not PEER_SERVER_URL:
+        # No peer to compare with (standalone mode).
+        stale = False
+    else:
+        peer = peer_db_role()
+        if peer is None:
+            # Peer unreachable: keep the previous verdict. A stale node must not
+            # become writable just because the current primary went quiet.
+            with _split_brain_lock:
+                stale = _split_brain["stale"]
+                reason = _split_brain["reason"]
+        elif not peer.get("in_recovery"):
+            try:
+                peer_tl = int(peer.get("timeline_id") or 0)
+            except (TypeError, ValueError):
+                peer_tl = 0
+            if peer_tl > local_tl:
+                stale = True
+                reason = f"peer timeline {peer_tl} is newer than local {local_tl}"
+            elif peer_tl == local_tl:
+                stale = True
+                reason = f"both nodes are primary on timeline {local_tl}"
+            else:
+                reason = f"local timeline {local_tl} is newer than peer {peer_tl}"
+        else:
+            reason = "peer is a standby"
+
+    with _split_brain_lock:
+        changed = bool(stale) != _split_brain["stale"]
+        _split_brain["stale"] = bool(stale)
+        _split_brain["reason"] = reason
+        _split_brain["in_recovery"] = bool(in_recovery)
+
+    if changed and stale:
+        logger.warning(
+            f"SPLIT-BRAIN DETECTED ({reason}). This node is stale and is now "
+            f"read-only. Rebuild it as a replica: sudo bash rejoin_as_replica.sh"
+        )
+    elif changed:
+        logger.info("stale-primary state cleared; node is consistent again")
+
+
+def is_stale_primary() -> bool:
+    with _split_brain_lock:
+        return _split_brain["stale"]
+
+
+def split_brain_snapshot() -> dict[str, Any]:
+    with _split_brain_lock:
+        return {
+            "stale_primary": _split_brain["stale"],
+            "reason": _split_brain["reason"],
+            "db_role": "standby" if _split_brain["in_recovery"] else "primary",
+        }
+
+
+def _monitor_loop() -> None:
+    while not _lease_stop.is_set():
+        try:
+            _check_split_brain()
+        except Exception as exc:  # never let the monitor die
+            logger.warning(f"split-brain monitor error: {exc}")
+        _lease_stop.wait(SPLIT_BRAIN_CHECK_INTERVAL)
+
+
+# ---------------------------------------------------------------------------
 # Lease-based leader election (exclusive primary)
 # ---------------------------------------------------------------------------
 # Quorum counting alone has a hole: if the A-B link is cut but both servers
@@ -219,6 +403,19 @@ def _witness_post(path: str, payload: dict) -> Optional[dict]:
 def _lease_tick() -> None:
     """One lease cycle: renew if leader, otherwise try to acquire."""
     if not ENABLE_LEASE:
+        return
+
+    # A stale primary must never hold leadership: release it and stay read-only
+    # until it is rebuilt as a replica.
+    if is_stale_primary():
+        with _lease_lock:
+            was_leader = _lease_state["is_leader"]
+        if was_leader:
+            _witness_post("/lease/release", {"node": NODE_ID})
+            with _lease_lock:
+                _lease_state["is_leader"] = False
+                _lease_state["expires_at"] = 0.0
+            logger.warning("stale primary released the write lease; read-only")
         return
 
     now = time.monotonic()
@@ -314,6 +511,13 @@ def on_startup() -> None:
         with conn.cursor() as cur:
             cur.execute("SELECT 1")
 
+    # Detect a stale primary (e.g. this node came back after a failover)
+    try:
+        _check_split_brain()
+    except Exception as exc:
+        logger.warning(f"initial split-brain check failed: {exc}")
+    threading.Thread(target=_monitor_loop, name="split-brain-monitor", daemon=True).start()
+
     # Take leadership before announcing readiness (fail-closed if witness is down)
     if ENABLE_LEASE:
         if not WITNESS_URL:
@@ -343,14 +547,35 @@ def health() -> dict:
     return {"status": "ok"}
 
 
+@app.get("/db-role")
+def db_role():
+    """Expose this node's database role and timeline for peer comparison."""
+    try:
+        in_recovery, timeline_id = _local_db_identity()
+        return {
+            "node": NODE_ID,
+            "role": "standby" if in_recovery else "primary",
+            "in_recovery": in_recovery,
+            "timeline_id": timeline_id,
+        }
+    except Exception as exc:
+        return JSONResponse(
+            status_code=503,
+            content={"node": NODE_ID, "error": f"database unavailable: {exc}"},
+        )
+
+
 @app.get("/quorum-status")
 def quorum_status() -> dict:
     """Check current quorum and lease status."""
     quorum_ok = has_quorum()
     lease_ok = has_lease()
-    can_write = quorum_ok and lease_ok
+    stale = is_stale_primary()
+    can_write = quorum_ok and lease_ok and not stale
 
-    if not ENABLE_QUORUM and not ENABLE_LEASE:
+    if stale:
+        mode = "read-only"
+    elif not ENABLE_QUORUM and not ENABLE_LEASE:
         mode = "standalone"
     else:
         mode = "primary" if can_write else "read-only"
@@ -359,6 +584,7 @@ def quorum_status() -> dict:
         "quorum_enabled": ENABLE_QUORUM,
         "has_quorum": quorum_ok,
         "lease": lease_snapshot(),
+        "split_brain": split_brain_snapshot(),
         "can_write": can_write,
         "mode": mode,
         "witness_url": WITNESS_URL or None,
@@ -442,6 +668,27 @@ def transaction(body: TransactionRequest, request: Request):
             )
             return _error("error", f"unsupported action: {body.action}", 400, account)
 
+        # A stale primary (returned after a failover) holds old data; refuse
+        # everything so the client fails over to the current primary.
+        if is_stale_primary():
+            latency = (time.perf_counter() - started) * 1000
+            write_log(
+                request_id=request_id,
+                client_ip=client_ip,
+                action=action,
+                account=account,
+                result="error:stale_primary",
+                latency_ms=latency,
+                extra="replication broken: this node must rejoin as a replica",
+            )
+            return _error(
+                "error",
+                "stale primary: a newer primary exists; this node must rejoin "
+                "as a replica (run rejoin_as_replica.sh)",
+                503,
+                account,
+            )
+
         # Quorum + lease check for write operations (deposit/withdraw)
         if action in {"deposit", "withdraw"}:
             if not has_quorum():
@@ -480,8 +727,25 @@ def transaction(body: TransactionRequest, request: Request):
                     503,
                     account,
                 )
-            # Ensure DB is promoted if this replica took over as primary
-            ensure_primary_db()
+            # Promote only if this node may lead (peer is not a live primary)
+            if not ensure_primary_db():
+                latency = (time.perf_counter() - started) * 1000
+                write_log(
+                    request_id=request_id,
+                    client_ip=client_ip,
+                    action=action,
+                    account=account,
+                    result="error:standby_peer_primary",
+                    latency_ms=latency,
+                    extra="read-only: could not promote (peer may be primary)",
+                )
+                return _error(
+                    "error",
+                    "standby: cannot promote safely (peer may be the active "
+                    "primary); this node is read-only",
+                    503,
+                    account,
+                )
 
         try:
             with db_transaction() as cur:
