@@ -72,6 +72,9 @@ Voting members are: self, peer server, witness node.
 
 Before every write (`deposit`/`withdraw`), `has_quorum()` checks reachability of the witness (`/ping`) and the peer (`/health`) with a 2-second timeout. A server with fewer than 2 of 3 votes enters read-only mode and rejects writes with HTTP 503 `no quorum: read-only mode`. Balance inquiries remain allowed. After the partition heals, PostgreSQL streaming replication automatically catches the standby up with missed WAL records, so both sides converge without conflicts.
 
+**Known limitation and the lease upgrade.** Reachability counting is not a true leader election: if only the A-B link is cut while both servers can still reach the witness, each side counts `self + witness = 2` and both would believe they are primary. An optional, stronger mode fixes this (`ENABLE_LEASE=true`). The witness then acts as an arbiter that grants an exclusive, time-bounded lease to a single node (`/lease/acquire`, `/lease/renew`, `/lease/release`). A server writes only while it holds a valid lease and demotes itself to read-only when the lease is refused or expires, so two primaries can never write at the same time. The trade-off is fail-closed behaviour: if the witness is unreachable, writes stop until a lease can be obtained again.
+
+
 ---
 
 ## 3. Step-by-Step Setup and Configuration

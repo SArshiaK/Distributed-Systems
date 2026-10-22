@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import os
+import socket
 import threading
 import time
 import uuid
@@ -52,6 +53,13 @@ WITNESS_URL = os.getenv("WITNESS_URL", "")  # e.g., http://192.168.56.12:9000
 PEER_SERVER_URL = os.getenv("PEER_SERVER_URL", "")  # e.g., http://192.168.56.11:8000
 QUORUM_TIMEOUT = float(os.getenv("QUORUM_TIMEOUT", "2.0"))  # seconds
 ENABLE_QUORUM = os.getenv("ENABLE_QUORUM", "false").lower() == "true"
+
+# Lease-based leader election (stronger than quorum: exclusive leader)
+# When enabled, a server may only write while it holds the witness lease.
+ENABLE_LEASE = os.getenv("ENABLE_LEASE", "false").lower() == "true"
+NODE_ID = os.getenv("NODE_ID") or f"{socket.gethostname()}:{PORT}"
+LEASE_TTL = float(os.getenv("LEASE_TTL", "6.0"))  # seconds
+LEASE_RENEW_INTERVAL = float(os.getenv("LEASE_RENEW_INTERVAL", "2.0"))  # seconds
 
 # Limits how many transaction handlers run at the same time
 _client_slots = threading.Semaphore(MAX_CLIENTS)
@@ -175,6 +183,111 @@ def has_quorum() -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Lease-based leader election (exclusive primary)
+# ---------------------------------------------------------------------------
+# Quorum counting alone has a hole: if the A-B link is cut but both servers
+# can still reach the witness, both would count 2 votes and both would think
+# they are primary. The witness lease fixes this by granting leadership to
+# exactly one node at a time.
+
+_lease_lock = threading.Lock()
+_lease_state: dict[str, Any] = {
+    "is_leader": False,
+    "expires_at": 0.0,
+    "leader": None,
+}
+_lease_stop = threading.Event()
+
+
+def _witness_post(path: str, payload: dict) -> Optional[dict]:
+    """POST to the witness lease API; return JSON or None on failure."""
+    if not WITNESS_URL:
+        return None
+    try:
+        resp = requests.post(
+            f"{WITNESS_URL.rstrip('/')}{path}",
+            json=payload,
+            timeout=QUORUM_TIMEOUT,
+        )
+        if resp.status_code != 200:
+            return None
+        return resp.json()
+    except (requests.RequestException, ValueError):
+        return None
+
+
+def _lease_tick() -> None:
+    """One lease cycle: renew if leader, otherwise try to acquire."""
+    if not ENABLE_LEASE:
+        return
+
+    now = time.monotonic()
+    with _lease_lock:
+        was_leader = _lease_state["is_leader"]
+        current_expiry = _lease_state["expires_at"]
+
+    if was_leader:
+        data = _witness_post("/lease/renew", {"node": NODE_ID, "ttl": LEASE_TTL})
+        with _lease_lock:
+            if data and data.get("granted"):
+                _lease_state["expires_at"] = now + LEASE_TTL
+                _lease_state["leader"] = data.get("leader", NODE_ID)
+                return
+
+            # Renewal refused → we are no longer the leader.
+            if data is not None:
+                _lease_state["is_leader"] = False
+                _lease_state["leader"] = data.get("leader")
+                logger.warning(
+                    f"lease lost: leader is now {data.get('leader')}; entering read-only"
+                )
+                return
+
+            # Witness unreachable → keep serving until the local lease expires.
+            if now >= current_expiry:
+                _lease_state["is_leader"] = False
+                logger.warning("lease expired while witness unreachable; read-only")
+        return
+
+    data = _witness_post("/lease/acquire", {"node": NODE_ID, "ttl": LEASE_TTL})
+    if data and data.get("granted"):
+        with _lease_lock:
+            _lease_state["is_leader"] = True
+            _lease_state["expires_at"] = now + LEASE_TTL
+            _lease_state["leader"] = data.get("leader", NODE_ID)
+        logger.info(f"lease acquired by {NODE_ID}")
+
+
+def _lease_loop() -> None:
+    while not _lease_stop.is_set():
+        try:
+            _lease_tick()
+        except Exception as exc:  # never let the loop die
+            logger.warning(f"lease loop error: {exc}")
+        _lease_stop.wait(LEASE_RENEW_INTERVAL)
+
+
+def has_lease() -> bool:
+    """True when this server currently holds a valid write lease."""
+    if not ENABLE_LEASE:
+        return True
+    with _lease_lock:
+        return _lease_state["is_leader"] and time.monotonic() < _lease_state["expires_at"]
+
+
+def lease_snapshot() -> dict[str, Any]:
+    with _lease_lock:
+        now = time.monotonic()
+        return {
+            "enabled": ENABLE_LEASE,
+            "node_id": NODE_ID,
+            "is_leader": _lease_state["is_leader"],
+            "leader": _lease_state["leader"],
+            "expires_in": max(0.0, round(_lease_state["expires_at"] - now, 3)),
+        }
+
+
+# ---------------------------------------------------------------------------
 # Request / response models
 # ---------------------------------------------------------------------------
 
@@ -200,10 +313,29 @@ def on_startup() -> None:
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT 1")
+
+    # Take leadership before announcing readiness (fail-closed if witness is down)
+    if ENABLE_LEASE:
+        if not WITNESS_URL:
+            logger.warning(
+                "ENABLE_LEASE=true but WITNESS_URL is empty: all writes will be "
+                "rejected (read-only) because leadership cannot be acquired"
+            )
+        _lease_tick()
+        threading.Thread(target=_lease_loop, name="lease-loop", daemon=True).start()
+
     logger.info(
         f"{utc_now()}  server_start  max_clients={MAX_CLIENTS}  "
-        f"db=connected  listening={HOST}:{PORT}"
+        f"db=connected  listening={HOST}:{PORT}  node={NODE_ID}  "
+        f"lease={'enabled' if ENABLE_LEASE else 'disabled'}"
     )
+
+
+@app.on_event("shutdown")
+def on_shutdown() -> None:
+    _lease_stop.set()
+    if ENABLE_LEASE:
+        _witness_post("/lease/release", {"node": NODE_ID})
 
 
 @app.get("/health")
@@ -213,19 +345,22 @@ def health() -> dict:
 
 @app.get("/quorum-status")
 def quorum_status() -> dict:
-    """Check current quorum status."""
-    if not ENABLE_QUORUM:
-        return {
-            "quorum_enabled": False,
-            "has_quorum": True,
-            "mode": "standalone",
-        }
-    
-    has_q = has_quorum()
+    """Check current quorum and lease status."""
+    quorum_ok = has_quorum()
+    lease_ok = has_lease()
+    can_write = quorum_ok and lease_ok
+
+    if not ENABLE_QUORUM and not ENABLE_LEASE:
+        mode = "standalone"
+    else:
+        mode = "primary" if can_write else "read-only"
+
     return {
-        "quorum_enabled": True,
-        "has_quorum": has_q,
-        "mode": "primary" if has_q else "read-only",
+        "quorum_enabled": ENABLE_QUORUM,
+        "has_quorum": quorum_ok,
+        "lease": lease_snapshot(),
+        "can_write": can_write,
+        "mode": mode,
         "witness_url": WITNESS_URL or None,
         "peer_url": PEER_SERVER_URL or None,
     }
@@ -307,7 +442,7 @@ def transaction(body: TransactionRequest, request: Request):
             )
             return _error("error", f"unsupported action: {body.action}", 400, account)
 
-        # Quorum check for write operations (deposit/withdraw)
+        # Quorum + lease check for write operations (deposit/withdraw)
         if action in {"deposit", "withdraw"}:
             if not has_quorum():
                 latency = (time.perf_counter() - started) * 1000
@@ -323,6 +458,25 @@ def transaction(body: TransactionRequest, request: Request):
                 return _error(
                     "error",
                     "no quorum: server in read-only mode due to network partition",
+                    503,
+                    account,
+                )
+            # Exclusive leader check: prevents two primaries writing when both
+            # can still reach the witness (the quorum-counting blind spot).
+            if not has_lease():
+                latency = (time.perf_counter() - started) * 1000
+                write_log(
+                    request_id=request_id,
+                    client_ip=client_ip,
+                    action=action,
+                    account=account,
+                    result="error:not_leader",
+                    latency_ms=latency,
+                    extra="read-only mode: witness lease not held",
+                )
+                return _error(
+                    "error",
+                    "not primary: server in read-only mode (lease not held)",
                     503,
                     account,
                 )

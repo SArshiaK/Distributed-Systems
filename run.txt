@@ -1,0 +1,38 @@
+تعداد ککلاینت ها رو از .env میگیریم
+
+
+Client:
+curl http://192.168.56.101:8000/quorum-status
+curl http://192.168.56.104:8000/quorum-status
+
+Server B:
+sudo iptables -A INPUT -s 192.168.56.101 -j DROP
+sudo iptables -A OUTPUT -d 192.168.56.101 -j DROP
+sudo iptables -A INPUT -s 192.168.56.103 -j DROP
+sudo iptables -A OUTPUT -d 192.168.56.103 -j DROP
+
+Client:
+curl http://192.168.56.104:8000/quorum-status
+
+curl -X POST http://192.168.56.104:8000/transaction \
+  -H "Content-Type: application/json" \
+  -d '{"action":"deposit","account":"A1001","amount":50}'
+
+curl -X POST http://192.168.56.104:8000/transaction \
+  -H "Content-Type: application/json" \
+  -d '{"action":"balance","account":"A1001"}'
+
+python3 client.py deposit A1001 100
+
+server B:
+sudo iptables -F
+
+Client:
+curl -X POST http://192.168.56.101:8000/transaction \
+  -H "Content-Type: application/json" \
+  -d '{"action":"balance","account":"A1001"}'
+
+curl -X POST http://192.168.56.104:8000/transaction \
+  -H "Content-Type: application/json" \
+  -d '{"action":"balance","account":"A1001"}'
+

@@ -90,6 +90,73 @@ python client.py balance A1001
 
 ---
 
+## بخش اختیاری: Lease (جلوگیری کامل از Split-Brain)
+
+این حالت سوراخ «شمارش رأی» را می‌بندد. اگر فقط لینک A↔B قطع شود ولی هر دو به Witness
+دسترسی داشته باشند، در حالت Quorum هر دو خود را primary می‌دانند. با Lease فقط
+یک سرور در هر لحظه رهبر است.
+
+### تنظیم (روی هر دو سرور در `.env`):
+
+```bash
+ENABLE_LEASE=true
+NODE_ID=server-a        # روی Server B: server-b
+LEASE_TTL=6
+LEASE_RENEW_INTERVAL=2
+```
+
+سپس هر دو سرور را ری‌استارت کنید. Witness نیازی به تنظیم اضافه ندارد.
+
+### تست ۱: بررسی رهبر
+
+```bash
+curl http://192.168.56.101:8000/quorum-status
+# انتظار: "lease": {"is_leader": true, "leader": "server-a", ...}
+
+curl http://192.168.56.104:8000/quorum-status
+# انتظار: "lease": {"is_leader": false, "leader": "server-a", ...}, mode=read-only
+```
+
+### تست ۲: قطع فقط لینک A↔B (هر دو به Witness وصل‌اند)
+
+```bash
+# روی Server B
+sudo iptables -A INPUT  -s 192.168.56.101 -j DROP
+sudo iptables -A OUTPUT -d 192.168.56.101 -j DROP
+```
+
+نتیجه مورد انتظار: Server A همچنان می‌نویسد، اما Server B با وجود داشتن
+`has_quorum=true` به خاطر نداشتن lease نوشتن را رد می‌کند:
+
+```bash
+curl -X POST http://192.168.56.104:8000/transaction \
+  -H "Content-Type: application/json" \
+  -d '{"action":"deposit","account":"A1001","amount":50}'
+# خطا: "not primary: server in read-only mode (lease not held)"
+```
+
+### تست ۳: مردن Server A
+
+Server A را با `Ctrl+C` ببندید. حداکثر بعد از `LEASE_TTL` ثانیه، Server B
+lease را می‌گیرد و primary می‌شود:
+
+```bash
+curl http://192.168.56.104:8000/quorum-status
+# انتظار: "lease": {"is_leader": true, "leader": "server-b", ...}, mode=primary
+```
+
+### پاک‌سازی
+
+```bash
+# روی Server B
+sudo iptables -F
+```
+
+> نکته: اگر Witness خاموش شود، پس از پایان `LEASE_TTL` هیچ سروری نمی‌تواند
+> بنویسد (رفتار Fail-Closed). این انتخاب عمدی برای حفظ صحت داده است.
+
+---
+
 ## چک‌لیست برای ویدیو
 
 ### بخش ۱۰٪:
