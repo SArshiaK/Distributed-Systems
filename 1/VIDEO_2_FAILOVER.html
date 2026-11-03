@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>ویدیو ۲ — بونوس اول: Failover خودکار (+۱۰٪)</title>
+<style>
+  @font-face {
+    font-family: 'Vazir';
+    src: url('./fonts/woff2/Vazir.woff2') format('woff2'), url('./fonts/woff/Vazir.woff') format('woff'), url('./fonts/ttf/Vazir.ttf') format('truetype');
+    font-weight: normal; font-style: normal;
+  }
+  @font-face {
+    font-family: 'Vazir';
+    src: url('./fonts/woff2/Vazir-Bold.woff2') format('woff2'), url('./fonts/woff/Vazir-Bold.woff') format('woff'), url('./fonts/ttf/Vazir-Bold.ttf') format('truetype');
+    font-weight: bold; font-style: normal;
+  }
+
+  @page { size: A4; margin: 1.6cm 1.5cm; }
+  * { box-sizing: border-box; }
+
+  body {
+    font-family: 'Vazir', Tahoma, sans-serif;
+    font-size: 10.5pt; line-height: 1.55; color: #222;
+    margin: 0; padding: 0; text-align: justify;
+    background: #fff;
+  }
+
+  @media screen {
+    body { max-width: 21cm; margin: 25px auto; padding: 30px 40px;
+           box-shadow: 0 0 10px rgba(0,0,0,0.15); border-radius: 4px; }
+  }
+
+  h1 { font-size: 16pt; font-weight: bold; color: #1a365d;
+       border-bottom: 2px solid #333; padding-bottom: 8px; margin: 0 0 12px 0; }
+  h2 { font-size: 12pt; font-weight: bold; color: #333;
+       border-bottom: 1px solid #ccc; padding-bottom: 4px; margin: 14px 0 8px; }
+  h3 { font-size: 10.5pt; font-weight: bold; color: #2d3748; margin: 10px 0 6px; }
+  p { margin: 6px 0; }
+  ul, ol { margin: 6px 0; padding-right: 22px; }
+  li { margin-bottom: 4px; }
+  blockquote { margin: 4px 14px; color: #444; font-style: italic; }
+  hr { border: none; border-top: 1px solid #ddd; margin: 16px 0; }
+
+  code { font-family: Consolas, monospace; font-size: 9pt; background: #f0f0f0;
+         padding: 1px 4px; border-radius: 3px; direction: ltr; display: inline-block; }
+
+  pre { font-family: Consolas, monospace; font-size: 9pt; background: #fafafa;
+        border: 1px solid #ddd; border-radius: 4px; padding: 8px 10px;
+        line-height: 1.4; direction: ltr; text-align: left;
+        overflow-x: auto; white-space: pre-wrap; margin: 6px 0; position: relative; }
+
+  .code-block { position: relative; margin: 8px 0; }
+  .code-block pre { margin: 0; }
+
+  .copy-btn {
+    position: absolute; top: 4px; right: 4px;
+    background: transparent; border: none; color: #bbb;
+    font-size: 13px; cursor: pointer; padding: 2px 6px; line-height: 1;
+    transition: color 0.15s, transform 0.1s; user-select: none; z-index: 2; opacity: 0;
+  }
+  .code-block:hover .copy-btn { opacity: 1; }
+  .copy-btn:hover { color: #2b6cb0; transform: scale(1.2); }
+  .copy-btn.copied { color: #38a169; }
+
+  .pdf-btn {
+    position: fixed; top: 16px; left: 16px;
+    background: #333; color: #fff; border: none; border-radius: 6px;
+    padding: 10px 18px; font-family: 'Vazir', sans-serif; font-size: 11pt;
+    cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+  }
+  .pdf-btn:hover { background: #555; }
+  @media print { .pdf-btn, .copy-btn { display: none; } }
+</style>
+</head>
+<body>
+
+<button class="pdf-btn" onclick="window.print()">💾 ذخیره به‌عنوان PDF</button>
+
+<h1>🎬 ویدیو ۲ — بونوس اول: تاب‌آوری و انتقال خودکار ترافیک (Failover - +۱۰٪)</h1>
+
+<p>
+این ویدیو برای بخش بونوس ۱۰٪ است و سناریوی زیر را به تصویر می‌کشد:
+<strong>ارسال درخواست‌های پیوسته کلاینت، کشتن ناگهانی سرور اصلی A در میانه ترافیک، انتقال خودکار و بدون وقفه به سرور پشتیبان B، ارتقای اتوماتیک دیتابیس B با pg_promote و ثبت تراکنش‌های بعدی بدون دخالت دست.</strong>
+<br>
+مدت زمان تقریبی: <strong>حدود ۲ دقیقه</strong>
+</p>
+
+<h2>آماده‌سازی قبل از ضبط</h2>
+<ul>
+  <li><strong>Server A (Primary):</strong> در ترمینال با <code>python server.py</code> در حال اجراست (.101)</li>
+  <li><strong>Server B (Replica):</strong> در ترمینال با <code>python server.py</code> در حال اجراست (.104)</li>
+  <li><strong>Client VM:</strong> ترمینال آماده است (.102)</li>
+</ul>
+
+<h3>پیش‌نیاز بسیار مهم:</h3>
+<p>مطمئن شوید دیتابیس سرور B هنوز در حالت Standby Replica است. برای اطمینان، روی سرور A دستور زیر را بزنید و باید وضعیت streaming بدهد:</p>
+<pre>sudo -u postgres psql -c "SELECT client_addr, state FROM pg_stat_replication;"</pre>
+
+<hr>
+
+<h2>بخش ۱ — معرفی سناریوی Failover (۰:۰۰ — ۰:۳۰)</h2>
+
+<h3>متن پیشنهادی برای روایت صوتی:</h3>
+<blockquote>
+"در این ویدیو بخش پیشرفته اول یعنی کلاستر با تحمل‌پذیری در برابر خرابی (Fault Tolerance) به همراه مکانیزم Failover خودکار با ارزش ۱۰ درصد نمره امتیازی را نمایش می‌دهیم. در این معماری، سرور A در نقش Primary و سرور B در نقش Standby Replica با استفاده از PostgreSQL Streaming Replication همگام هستند. کلاینت دارای لیستی از هر دو سرور است. اکنون ترافیک پیوسته ایجاد می‌کنیم و در میانه کار، سرور A را به طور ناگهانی متوقف می‌سازیم تا رفتار انتقال بدون وقفه سامانه را مشاهده کنیم."
+</blockquote>
+
+<h2>بخش ۲ — شروع ترافیک و کشتن ناگهانی Server A (۰:۳۰ — ۱:۱۵)</h2>
+
+<h3>۱. اجرای دستور در ترمینال Client VM:</h3>
+<pre>python3 client.py failover-demo A1001</pre>
+
+<h3>۲. اقدام حین اجرا (در درخواست ۵ یا ۶):</h3>
+<p>سریعاً به ترمینال <strong>Server A</strong> رفته و دکمه‌های <strong><code>Ctrl+C</code></strong> را بزنید تا پروسه سرور کشته شود.</p>
+
+<h3>۳. خروجی که در کلاینت نمایان می‌شود:</h3>
+<pre>Request  1: success  balance=1000.0  server=http://192.168.56.101:8000
+...
+Request  5: success  balance=1000.0  server=http://192.168.56.101:8000
+Request  6: success  balance=1000.0  server=http://192.168.56.104:8000  <-- سوئیچ به سرور B!
+Request  7: success  balance=1000.0  server=http://192.168.56.104:8000
+...</pre>
+
+<h3>روایت:</h3>
+<blockquote>
+"همان‌طور که مشاهده می‌کنید، درخواست‌ها ابتدا توسط سرور A پاسخ داده می‌شوند. در میانه درخواست‌ها، سرور A را با Ctrl+C می‌کشیم. کلاینت بلافاصله قطعی سرور A را تشخیص داده و بدون نمایش هیچ‌گونه خطایی، درخواست بعدی را به سرور B ارسال می‌کند. ترافیک بدون حتی یک میلی‌ثانیه وقفه یا کرش به مسیر خود ادامه می‌دهد."
+</blockquote>
+
+<h2>بخش ۳ — ثبت تراکنش‌های جدید روی Server B ارتقایافته (۱:۱۵ — ۱:۵۰)</h2>
+
+<p>حالا باید نشان دهیم سرور B فقط یک آینه خواندنی نیست، بلکه به طور خودکار به Master تبدیل شده و تراکنش‌های نوشتن را می‌پذیرد:</p>
+
+<h3>دستورات در ترمینال Client VM:</h3>
+<pre>python3 client.py deposit A1001 50
+python3 client.py withdraw A1001 20
+python3 client.py balance A1001</pre>
+
+<h3>روایت:</h3>
+<blockquote>
+"اکنون در حالی که سرور A کاملاً خاموش است، تراکنش‌های واریز ۵۰ تومان و برداشت ۲۰ تومان را ارسال می‌کنیم. سرور B در اولین درخواست نوشتن، متوجه وضعیت ریکاوری دیتابیس شده و با فراخوانی تابع pg_promote()، پایگاه داده خود را به صورت خودکار به Master ارتقا می‌دهد. تراکنش‌های واریز و برداشت با موفقیت انجام شده و موجودی نهایی دقیقاً محاسبه می‌شود. هیچ تراکنشی مفقود نشده و هیچ عملیاتی دو بار اعمال نگردیده است."
+</blockquote>
+
+<h2>بخش ۴ — بازگشت Server A و تبدیل شدن به رپلیکای جدید (۱:۵۰ — ۲:۴۰)</h2>
+
+<p>
+پس از ارتقای B، دیتابیس A هنوز یک primary قدیمی است. چون Streaming Replication ذاتاً
+یک‌طرفه است، بین دو primary هیچ WAL جابه‌جا نمی‌شود و replication تا بازسازی A متوقف می‌ماند.
+برنامه این وضعیت را خودکار تشخیص می‌دهد (مقایسهٔ timeline) و روی A درخواست‌ها را با
+<code>503 stale primary</code> رد می‌کند تا کلاینت به B برود.
+</p>
+
+<h3>۱. پیش‌نیاز یک‌باره روی Server B (اجازهٔ replication به A):</h3>
+<pre>sudo bash -c 'cat >> /etc/postgresql/*/main/pg_hba.conf << EOF
+host    replication     replicator      192.168.56.101/32       md5
+host    minibank        bankuser        192.168.56.0/24         md5
+EOF'
+sudo systemctl reload postgresql</pre>
+
+<h3>۲. روی Server A — برنامه را ببندید و سپس:</h3>
+<pre>sudo bash rejoin_as_replica.sh</pre>
+
+<p>اسکریپت ابتدا مطمئن می‌شود B واقعاً primary است، سپس دیتابیس قدیمی را کنار می‌گذارد،
+از B کلون می‌گیرد و A را به‌صورت standby بالا می‌آورد.</p>
+
+<h3>۳. بررسی:</h3>
+<pre># روی Server A
+sudo -u postgres psql -tAc "SELECT pg_is_in_recovery()"               # t
+sudo -u postgres psql -c "SELECT status FROM pg_stat_wal_receiver;"  # streaming
+
+# روی Server B
+sudo -u postgres psql -c "SELECT client_addr, state FROM pg_stat_replication;"
+# 192.168.56.101 | streaming</pre>
+
+<h3>۴. اجرای مجدد برنامه روی Server A:</h3>
+<pre>source venv/bin/activate && python3 server.py</pre>
+
+<h3>روایت:</h3>
+<blockquote>
+"وقتی سرور A برمی‌گردد، دیگر نمی‌تواند primary بماند، چون تغییرات جدید روی B ثبت شده‌اند.
+با مقایسهٔ timeline، سامانه تشخیص می‌دهد A عقب‌تر است و آن را فقط‌خواندنی می‌کند. سپس با
+اسکریپت rejoin، دیتابیس A از B بازسازی می‌شود و به‌عنوان رپلیکا به کلاستر برمی‌گردد.
+از این لحظه تغییرات B به A منتقل می‌شوند و هر دو دیتابیس همگام‌اند."
+</blockquote>
+
+<h2>بخش ۵ — جمع‌بندی بونوس اول (۲:۴۰ — ۲:۵۰)</h2>
+
+<h3>روایت پایانی:</h3>
+<blockquote>
+"این نشان‌دهنده تحقق کامل مشخصات بخش ۵ تمرین برای کسب امتیاز +۱۰٪ فیل‌اور خودکار بود، به‌همراه بازگشت سالم نود خراب‌شده به کلاستر. سپاس از توجه شما."
+</blockquote>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('pre').forEach(pre => {
+      const text = pre.innerText.trim();
+      if (!text) return;
+      const wrapper = document.createElement('div');
+      wrapper.className = 'code-block';
+      pre.parentNode.insertBefore(wrapper, pre);
+      wrapper.appendChild(pre);
+      const btn = document.createElement('button');
+      btn.className = 'copy-btn';
+      btn.innerText = '⧉';
+      btn.title = 'کپی کد';
+      btn.onclick = () => {
+        navigator.clipboard.writeText(text).then(() => {
+          btn.innerText = '✓';
+          btn.classList.add('copied');
+          setTimeout(() => { btn.innerText = '⧉'; btn.classList.remove('copied'); }, 1500);
+        });
+      };
+      wrapper.appendChild(btn);
+    });
+  });
+</script>
+
+</body>
+</html>

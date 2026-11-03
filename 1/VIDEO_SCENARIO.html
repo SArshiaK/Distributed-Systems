@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>سناریوی ضبط ویدیو — سرور تراکنش بانکی توزیع‌پذیر</title>
+<style>
+  @font-face {
+    font-family: 'Vazir';
+    src: url('./fonts/woff2/Vazir.woff2') format('woff2'),
+         url('./fonts/woff/Vazir.woff') format('woff'),
+         url('./fonts/ttf/Vazir.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+  }
+  @font-face {
+    font-family: 'Vazir';
+    src: url('./fonts/woff2/Vazir-Bold.woff2') format('woff2'),
+         url('./fonts/woff/Vazir-Bold.woff') format('woff'),
+         url('./fonts/ttf/Vazir-Bold.ttf') format('truetype');
+    font-weight: bold;
+    font-style: normal;
+  }
+  @font-face {
+    font-family: 'Vazir';
+    src: url('./fonts/woff2/Vazir-Medium.woff2') format('woff2'),
+         url('./fonts/woff/Vazir-Medium.woff') format('woff'),
+         url('./fonts/ttf/Vazir-Medium.ttf') format('truetype');
+    font-weight: 500;
+    font-style: normal;
+  }
+
+  @page {
+    size: A4;
+    margin: 1.6cm 1.5cm;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    font-family: 'Vazir', Tahoma, sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.55;
+    color: #222;
+    background: #fff;
+    margin: 0;
+    padding: 0;
+    text-align: justify;
+  }
+
+  @media screen {
+    body {
+      max-width: 21cm;
+      margin: 25px auto;
+      padding: 30px 40px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.15);
+      border-radius: 4px;
+    }
+  }
+
+  h1 {
+    font-size: 16pt;
+    font-weight: bold;
+    color: #1a365d;
+    border-bottom: 2px solid #2b6cb0;
+    padding-bottom: 8px;
+    margin-top: 0;
+    margin-bottom: 12px;
+  }
+
+  h2 {
+    font-size: 12pt;
+    font-weight: bold;
+    color: #2c5282;
+    border-bottom: 1px solid #cbd5e0;
+    padding-bottom: 4px;
+    margin-top: 14px;
+    margin-bottom: 8px;
+  }
+
+  h3 {
+    font-size: 10.5pt;
+    font-weight: bold;
+    color: #2d3748;
+    margin-top: 10px;
+    margin-bottom: 6px;
+  }
+
+  p {
+    margin: 6px 0;
+  }
+
+  ul, ol {
+    margin: 6px 0;
+    padding-right: 22px;
+  }
+
+  li {
+    margin-bottom: 4px;
+  }
+
+  code {
+    font-family: Consolas, 'Courier New', monospace;
+    font-size: 9pt;
+    background: #edf2f7;
+    padding: 1px 4px;
+    border-radius: 3px;
+    direction: ltr;
+    display: inline-block;
+  }
+
+  pre {
+    font-family: Consolas, 'Courier New', monospace;
+    font-size: 8.5pt;
+    background: #f7fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    padding: 7px 10px;
+    line-height: 1.35;
+    direction: ltr;
+    text-align: left;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    margin: 6px 0;
+    position: relative;
+  }
+
+  .code-block {
+    position: relative;
+    margin: 8px 0;
+  }
+
+  .code-block pre {
+    margin: 0;
+    padding-right: 50px;
+  }
+
+  .copy-btn {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    background: transparent;
+    border: none;
+    color: #a0aec0;
+    font-size: 14px;
+    cursor: pointer;
+    padding: 2px 6px;
+    line-height: 1;
+    transition: color 0.15s, transform 0.1s;
+    user-select: none;
+    z-index: 2;
+    opacity: 0;
+  }
+
+  .code-block:hover .copy-btn { opacity: 1; }
+
+  .copy-btn:hover {
+    color: #2b6cb0;
+    transform: scale(1.25);
+  }
+
+  .copy-btn.copied {
+    color: #38a169;
+  }
+
+  @media print {
+    .copy-btn { display: none; }
+  }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 9.5pt;
+    margin: 8px 0;
+  }
+
+  th, td {
+    border: 1px solid #cbd5e0;
+    padding: 5px 8px;
+    text-align: right;
+  }
+
+  th {
+    background: #ebf8ff;
+    color: #2b6cb0;
+    font-weight: bold;
+  }
+
+  tr:nth-child(even) td {
+    background: #f7fafc;
+  }
+
+  .timer {
+    background: #2b6cb0;
+    color: #ffffff;
+    border-radius: 12px;
+    padding: 2px 10px;
+    font-size: 9pt;
+    font-weight: bold;
+    display: inline-block;
+    direction: ltr;
+  }
+
+  .say-box {
+    background: #f0fff4;
+    border-right: 4px solid #38a169;
+    padding: 7px 12px;
+    font-size: 9.5pt;
+    margin: 8px 0;
+    border-radius: 0 4px 4px 0;
+  }
+
+  .say-box strong {
+    color: #276749;
+  }
+
+  .warn-box {
+    background: #fffaf0;
+    border-right: 4px solid #dd6b20;
+    padding: 7px 12px;
+    font-size: 9.5pt;
+    margin: 8px 0;
+    border-radius: 0 4px 4px 0;
+  }
+
+  .warn-box strong {
+    color: #c05621;
+  }
+
+  .page-break {
+    page-break-before: always;
+  }
+
+  .pdf-btn {
+    position: fixed;
+    top: 16px;
+    left: 16px;
+    background: #2b6cb0;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 10px 18px;
+    font-family: 'Vazir', Tahoma, sans-serif;
+    font-size: 11pt;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+  }
+  .pdf-btn:hover { background: #2c5282; }
+  @media print { .pdf-btn { display: none; } }
+</style>
+</head>
+<body>
+
+<button class="pdf-btn" onclick="window.print()">💾 ذخیره به‌عنوان PDF</button>
+
+<h1>سناریوی ضبط ویدیو — نمایش دمو سرور تراکنش بانکی توزیع‌پذیر</h1>
+
+<p>
+این سناریو برای ضبط ویدیوی حداکثر ۵ دقیقه‌ای طراحی شده که تمام نیازمندی‌های بخش ۴ سند تمرین (نمایش عملیات عادی، خطاها، دیتاهای همزمان، لاگ‌ها و بخش‌های بونوس Failover و Split-Brain) را به طور کامل پوشش می‌دهد.
+</p>
+
+<div class="warn-box">
+  <strong>⚠️ نکات مهم قبل از ضبط:</strong>
+  <ul>
+    <li>کلید شروع ضبط ویدیو را آماده کنید؛ ترجیحاً از OBS Studio یا Xbox Game Bar ویندوز استفاده کنید.</li>
+    <li>خروجی صداiors به صورت «توضیح دادن با صدای خود» حیاتی است — به هیچ عنوان متن را بخوانید و لهجه طبیعی بگیرید.</li>
+    <li>قبل از زدن دکمهٔ رضایت، مطمئن شوید تمام ماشین‌ها روشن هستند و witness.py در ترمینال هاست در حال اجرا است.</li>
+    <li>پنجره‌ها و ترمینال‌ها را دقیقاً به همان ترتیبی چیدمان کنید که در سناریو آمده تا تماشاچی گیج نشود.</li>
+  </ul>
+</div>
+
+<h2>آماده‌سازی اولیه (قبل از شروع ضبط)</h2>
+
+<div class="timer">غرب زمان: ۰ دقیقه</div>
+
+<h3>۱. ترتیب لایه‌بندی صفحه (Screen Layout)</h3>
+<p>۴ ترمینال به صورت Quad Grid کنار هم ویندوز بدهید:</p>
+<table>
+  <tr><td><strong>Host ویندوز:</strong> ترمینال PowerShell با خروجی <code>witness.py</code></td><td><strong>VM Server A:</strong> ترمینال SSH با خروجی <code>server.py</code></td></tr>
+  <tr><td><strong>VM Server B:</strong> ترمینال SSH با خروجی <code>server.py</code></td><td><strong>VM Client:</strong> ترمینال SSH فعال برای دستورات</td></tr>
+</table>
+
+<h3>۲. پاک‌سازی اطلعalmöات Secfess (اختیاری اما توصیه‌شده)</h3>
+<pre>sudo -u postgres psql -d minibank -c "UPDATE accounts SET balance = 1000.00 WHERE account_id = 'A1001';"</pre>
+<p>برای شروع تمیز، موجودی حساب <code>A1001</code> به <code>1000</code> بازگشت داده شود.</p>
+
+<h3>۳. تست قبل از ضبط (Not Recording)</h3>
+<pre>python3 client.py balance A1001</pre>
+
+<div class="say-box">
+  <strong>✅ کنترل لیست نهایی Ready-to-Record:</strong>
+  <ul>
+    <li>[ ] Witness روی هاست روان است (پورت 9000 فعال)</li>
+    <li>[ ] Server A در ترمینال مجزا فعال است (پورت 8000)</li>
+    <li>[ ] Server B در حالت Replica فعال است (پورت 8000)</li>
+    <li>[ ] Client VM به هر دو سرور دسترسی دارد</li>
+    <li>[ ] نرم‌افزار ضبط صفحه فعال است (OBS Studio hazır)</li>
+    <li>[ ] ساعت شروع دمو: زمان‌سنج ۵ دقیقه‌ای</li>
+  </ul>
+</div>
+
+<h2>مرحله 1: معرفی و نمایش معماری (۰:۰۰ — ۰:۳۵)</h2>
+
+<div class="timer">⏱ ۳۵ ثانیه</div>
+
+<h3>چه تهیه کنیم:</h3>
+<p>در صفحه نمودار (Architecture diagram) از فایل <code>report.html</code> را نمایش دهید (یا اینترنتی روی یک صفحه اضافه کند).</p>
+
+<div class="say-box">
+  <strong>🎙 متن پیشنهادی برای خواندن (Voice Narration):</strong>
+  <blockquote>
+    "این پروژه یک سامانه بانکی توزیع‌شده با نام Mini Banking Server است. ارتباط بین ماشین‌ها با پروتکل HTTP و بسته‌های JSON انجام می‌شود. سازوکار با ۴ ماشین پیاده‌سازی شده: یک گره داور (Witness) برای رأی‌گیری به آدرس .103، سرور اصلی A به آدرس .101، سرور پشتیبان B به آدرس .104 و کلاینت به آدرس .102. پایگاه داده از PostgreSQL با Streaming Replication و قفل‌گذاری سطری برای مدیریت همزمانی بهره می‌برد."
+  </blockquote>
+</div>
+
+<h2>مرحله 2: نمایش عملیات عادی بانکی + تأیید Durability (۰:۳۵ — ۱:۱۰)</h2>
+
+<div class="timer">⏱ ۳۵ ثانیه</div>
+
+<h3>اجرای دستورات در ترمینال Client VM:</h3>
+<pre>python3 client.py balance A1001
+python3 client.py deposit A1001 100
+python3 client.py withdraw A1001 50
+python3 client.py balance A1001</pre>
+
+<div class="say-box">
+  <strong>🎙 متن پیشنهادی برای خواندن:</strong>
+  <blockquote>
+    "عملیات استعلام موجودی، واریز و برداشت به ترتیب انجام می‌شود. ابتدا موجودی ۱۰۰۰ تومان است، با واریز ۱۰۰ تومانی به ۱۱۰۰ تومان می‌رسد، و پس از برداشت ۵۰ تومان نهایی می‌شود به ۱۰۵۰. به خروجی‌های عددی دقت کنید — هر پاسخ دقیقاً منطبق بر محاسبات صحیح است."
+  </blockquote>
+</div>
+
+<h2>مرحله 3: نمایش کامل خطاها (Error Handling) (۱:۱۰ — ۱:۵۵)</h2>
+
+<div class="timer">⏱ ۴۵ ثانیه</div>
+
+<h3>اجرای دستورات در ترمینال Client VM:</h3>
+<pre>python3 client.py errors</pre>
+
+<div class="say-box">
+  <strong>🎙 متن پیشنهادی: </strong>
+  <blockquote>
+    "حالا خطاهای ۸ گانه تست‌شده‌ی مشخصات را می‌بینید. حساب نکوجود با خطای ۴۰۴، موجودی ناکافی و مقادیر منفی / صفر / حروف زائد با خطای ۴۰۰، عملیات پشتیبانی نشده مثل transfer هم ۴۰۰. فیلدهای ناقص و JSON های سالم خراب هم مدیریت می‌شوند. مهم است که بعد از این خطاها، سرور به کلی crash نکرده و همچنان سلامت است."
+  </blockquote>
+</div>
+
+<h2>مرحله 4: نمایش همزمانی، Isolation و حفظ صحت (۲:۵۵ — ۲:۳۰)</h2>
+
+<div class="timer">⏱ ۳۵ ثانیه</div>
+
+<h3>اجرای دستورات در ترمینال Client VM:</h3>
+<pre>python3 client.py stress A1001 20 10</pre>
+
+<div class="say-box">
+  <strong>🎙 متن پیشنهادی:</strong>
+  <blockquote>
+    "تمام ۲۰ کاربر همزمان برای برداشت ۱۰ تومانی اقدام می‌کنند. فیلاد آخر براچ است: OK — matches serial expectation. یعنی خروجی دقیقاً برابر با ترتیب سریال تراکنش‌هاست و هیچ Lost Update رخ نداده است. این اثباتی قطعی از Isolation با قفل سطری SELECT FOR UPDATE است."
+  </blockquote>
+</div>
+
+<h2>مرحله 5: Atomicity + Durability (۲:۳۰ — ۳:۱۰)</h2>
+
+<div class="timer">⏱ ۴۰ ثانیه</div>
+
+<h3>اجرای دستورات در ترمینال Client VM:</h3>
+<pre>python3 client.py withdraw A1001 999999
+python3 client.py balance A1001</pre>
+<p>(انتظار می‌رود موجودی تغییر نکند و خطای "insufficient funds" محقق شود.)</p>
+
+<div class="say-box">
+  <strong>🎙 متن پیشنهادی Atomicity:</strong>
+  <blockquote>
+    "سعی می‌کنیم موجودی غیرممکن برداشت کنیم. تراکنش با شکست مواجه می‌شود و روی موجودی هیچ تأثیری نمی‌گذارد — این اثبات Atomicity است.</blockquote>
+  <strong>🎙 شرح Durability:</strong>
+  <blockquote>
+    حالا مانگاری و مطمئن شویم که سرور کرش شود هیچ دیتایی از دست نمی‌رود. روی ترمینال Server A دکمه Ctrl+C می‌زنیم تا سرور کشته شود و بلافاصله دوباره python server.py را اجرا می‌کنیم. مشاهده می‌کنید که استعلام موجودی برابر همان عدد قبلی است. چون تراکنش Commit شده روی دیسک WAL ثبت گردیده، هیچ چیز از دست نرفته. این اثبات Durability است.
+  </blockquote>
+</div>
+
+<h3>اجرای دستورات در ترمینال Server A (پس از restart):</h3>
+<pre>sudo systemctl restart postgresql
+python3 server.py</pre>
+
+<h2>مرحله 6: نمایش Failover خودکار (+۱۰٪ بونوس) (۳:۱۰ — ۴:۰۰)</h2>
+
+<div class="timer">⏱ ۵۰ ثانیه</div>
+
+<h3>مراحل اجرا:</h3>
+<ul>
+  <li>مرحله اول و درخواست‌های عادی در کلاینت انجام شوند (قبل از این مرحله سرور A مجدداً روشن باشد).</li>
+  <li>اجرا عليه‌ی اجرای دستور <code>python3 client.py failover-demo A1001</code></li>
+  <li>در حین اجرا (Request 5 یا 6) روی کلاینت اجرای سرور A را با <code>Ctrl+C</code> بکشید.</li>
+  <li>برای تأیید آنکه واقعاً سوئچ به سرور B انجام شده، درخواست Deposite کن له:</li>
+</ul>
+
+<pre>python3 client.py deposit A1001 25
+python3 client.py balance A1001</pre>
+
+<div class="say-box">
+  <strong>🎙 متن پیشنهادی:</strong>
+  <blockquote>
+    "این بخش بونوس ۱۰٪ است — قابلیت تحمل‌پذیری در برابر خرابی. کلاینت به صورت حلقه‌ای هر ثانیه به سرور A درخواست می‌فرستد. در وسط اجرا، سرور A را به طور دستی و ناگهانی می‌کشیم. بلافاصله کلاینت در درخواست بعدی خطای اتصال به A را دریافت نکرده، بلکه به‌صورت خودکار به سرور B وصل می‌شود و تراکنش‌ها همچنان سالم ادامه می‌یابند. سرور B به طور خودکار دیتابیس خود را با pg_promote() به Master ارتقا داده و واریز ۲۵ تومانی روی آن موفق اجرا می‌شود. هیچ درخواستی از دست نرفته و هیچ تراکنشی دو بار اعمال نشده است."
+  </blockquote>
+</div>
+
+<h2>مرحله 7: نمایش قطع شبکه و جلوگیری از Split-Brain (+۱۵٪ بونوس) (۴:۰۰ — ۵:۰۰)</h2>
+
+<div class="timer">⏱ ۶۰ ثانیه</div>
+
+<h3>مراحل اجرا:</h3>
+<ol>
+  <li>مطمئن شوید Server A و Server B هر دو بالا هستند (اگر قبلاً سرور A کشته شده، دوباره راه‌اندازی کنید).</li>
+  <li>مطمئن شوید Witness در حال اجرا است.</li>
+  <li>در ترمینال Client، وضعیت اولیه را لازم است گزارش کنید:</li>
+</ol>
+
+<pre>curl http://192.168.56.101:8000/quorum-status
+curl http://192.168.56.104:8000/quorum-status</pre>
+<p>هر دو نشان می‌دهند <code>{"has_quorum": true}</code></p>
+
+<h3>به‌صورت زنده اجرا در Server B:</h3>
+<pre># قطع ارتباط شبکه‌ای بین سرور B و سرور اصلی A و همچنین Witness
+sudo iptables -A INPUT -s 192.168.56.101 -j DROP
+sudo iptables -A OUTPUT -d 192.168.56.101 -j DROP
+sudo iptables -A INPUT -s 192.168.56.103 -j DROP
+sudo iptables -A OUTPUT -d 192.168.56.103 -j DROP</pre>
+
+<h3>در حین قطع شبکه، در Client:</h3>
+<pre>curl http://192.168.56.104:8000/quorum-status</pre>
+<p>نتیجه باید باشد:</p>
+<pre>{"has_quorum": false, "mode": "read-only", ...}</pre>
+
+<h3>اجرای درخواست‌ها:</h3>
+<pre># تست نوشتن (مورد انتظار: ردیفی با خطای 503 no quorum)
+curl -X POST http://192.168.56.104:8000/transaction \\
+  -H "Content-Type: application/json" \\
+  -d '{"action":"deposit","account":"A1001","amount":50}'
+
+# تست استعلام (مورد انتظار: طبق معمول و موفق)
+curl -X POST http://192.168.56.104:8000/transaction \\
+  -H "Content-Type: application/json" \\
+  -d '{"action":"balance","account":"A1001"}'</pre>
+
+<div class="say-box">
+  <strong>🎙 متن پیشنهادی:</strong>
+  <blockquote>
+    "این مرحله، بونوس ۱۵٪ است — جلوگیری از سناریوی خطرناک Split-Brain. شبکه بین سرور A و B به همراه ارتباط با Gaudy را قطع می‌کنیم. بلافاصله سرور B تشخیص می‌دهد که تنها مانده و کمتر از رأی اکثریت (۱ از ۳) را دراختیار دارد؛ پس فوراً به حالت Read-Only می‌رود (خطای has_quorum false). اگر بخواهیم روی آن واریز کنیم، با خطای استاندارد HTTP 503 'no quorum: server in read-only mode' رد می‌شود، ولی استعلام موجودی به طور عادی پاس کار می‌دهد. در مقابل، سرور A (با حد و رأی اکثریت ۲ از ۳) همچنان تراکنش‌های واریز را می‌پذیرد. این تضمین می‌کند که هیچ‌گاه نتوان دو نسخه متناقض از دیتای یک حساب ساخته شود."
+  </blockquote>
+</div>
+
+<h3>بازیابی و برررسی نهایی (Recovery + Consistency Verification):</h3>
+<pre># بازگرداندن شبکه در Server B
+sudo iptables -F
+
+# روشن مجدد witness روی هاست (Ctrl+C سپس اجرا دوباره)
+python witness.py</pre>
+
+<h3>تست اطمینان در Client:</h3>
+<pre>curl http://192.168.56.101:8000/quorum-status
+curl http://192.168.56.104:8000/quorum-status
+
+# در انتها، موجودی را از هر دو سرور استعلام بگیرید — باید یکسان باشند
+curl -X POST http://192.168.56.101:8000/transaction \\
+  -H "Content-Type: application/json" \\
+  -d '{"action":"balance","account":"A1001"}'
+
+curl -X POST http://192.168.56.104:8000/transaction \\
+  -H "Content-Type: application/json" \\
+  -d '{"action":"balance","account":"A1001"}'</pre>
+
+<div class="say-box">
+  <strong>🎙 متن پیشنهادی پس از بازیابی:</strong>
+  <blockquote>
+    "با برگشت شبکه و راه‌اندازی مجدد گره داور، هر دو سرور گزارش می‌دهند که مجدداً has_quorum: true دارند و همه چیز سالم است. استعلام موجودی از هر دو سرور نشان می‌دهد که پس از بازگشت شبکه، تراکنش‌هایPrime Store شده از طریق Streaming Replication به سرور B منتقل گردیده و هر دو سرور دقت یکسان از داده‌های خود پیرامون حساب show می‌دهند. هیچ تراکنشی از دست نرفته و هیچ تراکنشی دو بار اعمال نشده است."
+  </blockquote>
+</div>
+
+<h2>مرحله 8: نمایش خروجی لاگ‌ها و کد اسکرین شات (۵:۰۰ — ۵:۳۰)</h2>
+
+<div class="timer">⏱ ۳۰ ثانیه</div>
+
+<h3>اجرای دستورات در ترمینال Server A:</h3>
+<pre>cat bank_server.log</pre>
+
+<div class="say-box">
+  <strong>🎙 متن پیشنهادی:</strong>
+  <blockquote>
+    "هر درخواست به همراه جزئیات کامل از زمان تقریبی، شناسه ریکوئست، IP کلاینت، action، حساب، وضعیت و latency در فایل bank_server.log ذخیره شده است. این اثبات دمو کاملی از تمام زیرساخت بانکی توزیع‌شده و تضمین‌های ACID تحت شرایط سخت‌گسترانه همزمانی است. از وقتی که وقت داده‌اید سپاس‌گزارم."
+  </blockquote>
+</div>
+
+<h2 class="page-break"></h2>
+
+<h2>✅ چک‌لیست نهایی برای ذخیره (Save this checklist)</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th style="width: 35%;"> گزینه تست </th>
+      <th> نتیجه مورد انتظار </th>
+      <th> کد وضعیت </th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>عملیات عادی</td><td>balance/deposit/withdraw همه موفق</td><td>HTTP 200</td></tr>
+    <tr><td>Error Handling</td><td>۸ خط اصلی، همه هندل شده، سرور crash نکرده</td><td>HTTP 400 / 404</td></tr>
+    <tr><td>Concurrency + Isolation</td><td>stress → «OK — matches serial expectation»</td><td>قفل سطری</td></tr>
+    <tr><td>Atomicity</td><td>تراکنش ناموفق → موجودی تغییر نکند</td><td>—</td></tr>
+    <tr><td>Durability</td><td>kill + restart سرور → موجودی بدون تغییر</td><td>—</td></tr>
+    <tr><td>Failover (+۱۰٪)</td><td>سوئیچ خودکار A → B بدون error</td><td>—</td></tr>
+    <tr><td>Partition (+۱۵٪)</td><td>Server B بدون quorum → read-only، write رد می‌شود</td><td>HTTP 503</td></tr>
+    <tr><td>Recovery (+۱۵٪)</td><td>رفع پارتیشن → هر دو سرور sync و balance یکسان</td><td>—</td></tr>
+  </tbody>
+</table>
+
+<div class="warn-box">
+  <strong>📌 یادآوری نهایی — ترتیب مهم مراحل:</strong>
+  <ul>
+    <li>سناریوی مرحله ۷ (Network Partition) حتماً <strong>قبل از</strong> مرحله ۶ (Failover) ضبط شود، چون Failover دیتابیس B را به Master ارتقا می‌دهد و دیگر رپلیکا نخواهد بود.</li>
+    <li>اگر مرحله ۶ قبل از مرحله ۷ ضبط شد، حتماً Server B را با دستور <strong>pg_basebackup</strong> دوباره بازسازی (Re-sync) کنید.</li>
+    <li>قبل از اتمام ویدیو حتماً فایل لاگ (bank_server.log) را نمایش دهید.</li>
+    <li>تا زمانی که مرحله ۷ کامل نشده، ویدیو را نبندید.</li>
+  </ul>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('pre').forEach(pre => {
+      // Don't add button to inline outputs or non-command blocks if empty
+      const text = pre.innerText.trim();
+      if (!text) return;
+
+      const wrapper = document.createElement('div');
+      wrapper.className = 'code-block';
+      pre.parentNode.insertBefore(wrapper, pre);
+      wrapper.appendChild(pre);
+
+      const btn = document.createElement('button');
+      btn.className = 'copy-btn';
+      btn.innerText = '⧉';
+      btn.title = 'کپی کد';
+      btn.onclick = () => {
+        navigator.clipboard.writeText(text).then(() => {
+          btn.innerText = '✓';
+          btn.classList.add('copied');
+          setTimeout(() => {
+            btn.innerText = '⧉';
+            btn.classList.remove('copied');
+          }, 1500);
+        });
+      };
+      wrapper.appendChild(btn);
+    });
+  });
+</script>
+
+</body>
+</html>

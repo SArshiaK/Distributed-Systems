@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>ویدیو ۱ — بخش اصلی تمرین (Core Assignment)</title>
+<style>
+  @font-face {
+    font-family: 'Vazir';
+    src: url('./fonts/woff2/Vazir.woff2') format('woff2'), url('./fonts/woff/Vazir.woff') format('woff'), url('./fonts/ttf/Vazir.ttf') format('truetype');
+    font-weight: normal; font-style: normal;
+  }
+  @font-face {
+    font-family: 'Vazir';
+    src: url('./fonts/woff2/Vazir-Bold.woff2') format('woff2'), url('./fonts/woff/Vazir-Bold.woff') format('woff'), url('./fonts/ttf/Vazir-Bold.ttf') format('truetype');
+    font-weight: bold; font-style: normal;
+  }
+
+  @page { size: A4; margin: 1.6cm 1.5cm; }
+  * { box-sizing: border-box; }
+
+  body {
+    font-family: 'Vazir', Tahoma, sans-serif;
+    font-size: 10.5pt; line-height: 1.55; color: #222;
+    margin: 0; padding: 0; text-align: justify;
+    background: #fff;
+  }
+
+  @media screen {
+    body { max-width: 21cm; margin: 25px auto; padding: 30px 40px;
+           box-shadow: 0 0 10px rgba(0,0,0,0.15); border-radius: 4px; }
+  }
+
+  h1 { font-size: 16pt; font-weight: bold; color: #1a365d;
+       border-bottom: 2px solid #333; padding-bottom: 8px; margin: 0 0 12px 0; }
+  h2 { font-size: 12pt; font-weight: bold; color: #333;
+       border-bottom: 1px solid #ccc; padding-bottom: 4px; margin: 14px 0 8px; }
+  h3 { font-size: 10.5pt; font-weight: bold; color: #2d3748; margin: 10px 0 6px; }
+  p { margin: 6px 0; }
+  ul, ol { margin: 6px 0; padding-right: 22px; }
+  li { margin-bottom: 4px; }
+  blockquote { margin: 4px 14px; color: #444; font-style: italic; }
+  hr { border: none; border-top: 1px solid #ddd; margin: 16px 0; }
+
+  code { font-family: Consolas, monospace; font-size: 9pt; background: #f0f0f0;
+         padding: 1px 4px; border-radius: 3px; direction: ltr; display: inline-block; }
+
+  pre { font-family: Consolas, monospace; font-size: 9pt; background: #fafafa;
+        border: 1px solid #ddd; border-radius: 4px; padding: 8px 10px;
+        line-height: 1.4; direction: ltr; text-align: left;
+        overflow-x: auto; white-space: pre-wrap; margin: 6px 0; position: relative; }
+
+  .code-block { position: relative; margin: 8px 0; }
+  .code-block pre { margin: 0; }
+
+  .copy-btn {
+    position: absolute; top: 4px; right: 4px;
+    background: transparent; border: none; color: #bbb;
+    font-size: 13px; cursor: pointer; padding: 2px 6px; line-height: 1;
+    transition: color 0.15s, transform 0.1s; user-select: none; z-index: 2; opacity: 0;
+  }
+  .code-block:hover .copy-btn { opacity: 1; }
+  .copy-btn:hover { color: #2b6cb0; transform: scale(1.2); }
+  .copy-btn.copied { color: #38a169; }
+
+  table { border-collapse: collapse; width: 100%; font-size: 9.5pt; margin: 8px 0; }
+  th, td { border: 1px solid #aaa; padding: 5px 8px; text-align: right; }
+  th { background: #f0f0f0; font-weight: bold; }
+  tr:nth-child(even) td { background: #fafafa; }
+
+  .timer { color: #666; font-size: 9pt; font-weight: bold; set: inline-block; }
+
+  .pdf-btn {
+    position: fixed; top: 16px; left: 16px;
+    background: #333; color: #fff; border: none; border-radius: 6px;
+    padding: 10px 18px; font-family: 'Vazir', sans-serif; font-size: 11pt;
+    cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+  }
+  .pdf-btn:hover { background: #555; }
+  @media print { .pdf-btn, .copy-btn { display: none; } }
+</style>
+</head>
+<body>
+
+<button class="pdf-btn" onclick="window.print()">💾 ذخیره به‌عنوان PDF</button>
+
+<h1>🎬 ویدیو ۱ — بخش اصلی تمرین (Core Assignment)</h1>
+
+<p>
+این ویدیو برای نشان دادن بخش اصلی (بدون بونوس) طراحی شده و شامل موارد زیر است:
+<strong>معرفی محیط، عملیات عادی، مدیریت خطاها، همزمانی و Isolation، Atomicity، Durability و نمایش لاگ‌ها.</strong>
+<br>
+مدت زمان تقریبی: <strong>حدود ۳.۵ دقیقه</strong>
+</p>
+
+<h2>آماده‌سازی قبل از شروع ضبط</h2>
+
+<ul>
+  <li><strong>Witness</strong> روی هاست ویندوز در حال اجراست (پورت 9000)</li>
+  <li><strong>Server A</strong> روی VM اول فعال است (پورت 8000)</li>
+  <li><strong>Server B</strong> روی VM دوم فعال است (پورت 8000)</li>
+  <li>کلاینت روی VM سوم دسترسی به هر دو سرور دارد</li>
+  <li>موجودی اولیه <code>A1001</code> به ۱۰۰۰ ریست شده:</li>
+</ul>
+
+<pre>sudo -u postgres psql -d minibank -c "UPDATE accounts SET balance = 1000.00 WHERE account_id = 'A1001';"</pre>
+
+<h3>چیدمان صفحه (۴ ترمینال کنار هم):</h3>
+<table>
+  <tr><td><strong>Host ویندوز:</strong> ترمینال witness.py</td><td><strong>Server A:</strong> ترمینال server.py</td></tr>
+  <tr><td><strong>Server B:</strong> ترمینال server.py</td><td><strong>Client:</strong> ترمینال دستورات</td></tr>
+</table>
+
+<hr>
+
+<h2>بخش ۱ — معرفی سیستم (۰:۰۰ — ۰:۳۰)</h2>
+
+<h3>متن پیشنهادی برای روایت صوتی:</h3>
+<blockquote>
+"این پروژه، یک سامانه بانکی کوچک توزیع‌شده با نام Mini Banking Server است. ارتباط بین ماشین‌ها بر بستر HTTP با داده‌های JSON انجام می‌شود. ما یک گره داور (Witness) به آدرس .103 داریم که برای رأی‌گیری حدنصاب استفاده می‌شود؛ سرور اصلی A به آدرس .101؛ سرور پشتیبان B به آدرس .104؛ و کلاینت به آدرس .102. پایگاه داده ما PostgreSQL است با مکانیزم Streaming Replication و کنترل همزمانی از طریق قفل‌گذاری سطری."
+</blockquote>
+
+<h2>بخش ۲ — عملیات عادی بانکی (۰:۳۰ — ۱:۰۰)</h2>
+
+<h3>دستورات در ترمینال Client VM:</h3>
+<pre>python3 client.py balance A1001
+python3 client.py deposit A1001 100
+python3 client.py withdraw A1001 50
+python3 client.py balance A1001</pre>
+
+<h3>روایت:</h3>
+<blockquote>
+"ابتدا موجودی حساب A1001 را استعلام می‌کنیم: ۱۰۰۰ تومان. سپس ۱۰۰ تومان واریز می‌کنیم — موجودی به ۱۱۰۰ تغییر می‌کند. پس از برداشت ۵۰ تومان، موجودی نهایی ۱۰۵۰ می‌شود. هر تراکنش قبل از ارسال پاسخ موفق، در دیسک Commit می‌شود."
+</blockquote>
+
+<h2>بخش ۳ — مدیریت جامع خطاها (۱:۰۰ — ۱:۴۵)</h2>
+
+<h3>دستورات در ترمینال Client VM:</h3>
+<pre>python3 client.py errors</pre>
+
+<h3>جدول خطاهای نمایش داده شده:</h3>
+<table>
+  <tr><th>خطا</th><th>کد HTTP</th><th>پیام</th></tr>
+  <tr><td>حساب ناموجود (Z9999)</td><td>404</td><td>unknown account: Z9999</td></tr>
+  <tr><td>موجودی ناکافی</td><td>400</td><td>insufficient funds</td></tr>
+  <tr><td>مقادیر منفی یا صفر</td><td>400</td><td>amount must be a positive number</td></tr>
+  <tr><td>مقدار invalid (مثل abc)</td><td>400</td><td>amount must be a positive number</td></tr>
+  <tr><td>عملیات پشتیبانی نشده (transfer)</td><td>400</td><td>unsupported action: transfer</td></tr>
+  <tr><td>فیلد ناقص</td><td>400</td><td>missing amount field</td></tr>
+  <tr><td>JSON خراب</td><td>400</td><td>malformed request</td></tr>
+</table>
+
+<h3>روایت:</h3>
+<blockquote>
+"حالا هشت زمینه اصلی خطا را پوشش می‌دهیم: حساب ناموجود با کد ۴۰۴، موجودی ناکافی، مقادیر منفی، صفر یا نامعتبر، اکشن ناشناخته، فیلدهای گم‌شده و JSON خراب — تمام خطاها با کدهای درست HTTP پاسخ می‌دهند و سرور همچنان در حال اجراست و crash نمی‌کند."
+</blockquote>
+
+<h2>بخش ۴ — همزمانی و Isolation (۱:۴۵ — ۲:۲۰)</h2>
+
+<h3>دستورات در ترمینال Client VM:</h3>
+<pre>python3 client.py stress A1001 20 10</pre>
+
+<h3>روایت:</h3>
+<blockquote>
+"۲۰ کلاینت همزمان برای برداشت ۱۰ تومانی اقدام می‌کنند. خروجی می‌گوید OK — matches serial expectation؛ یعنی موجودی نهایی دقیقاً برابر با ترتیب سریال تراکنش‌هاست، هیچ Lost Update رخ نداده. این اثباتی قطعی از Isolation با قفل سطری SELECT FOR UPDATE است."
+</blockquote>
+
+<h2>بخش ۵ — Atomicity (۲:۲۰ — ۲:۴۰)</h2>
+
+<h3>دستورات در ترمینال Client VM:</h3>
+<pre>python3 client.py withdraw A1001 999999
+python3 client.py balance A1001</pre>
+
+<h3>روایت:</h3>
+<blockquote>
+"سعی می‌کنیم برداشت غیرممکن انجام دهیم. تراکنش شکست می‌خورد و هیچ تأثیری روی موجودی نمی‌گذارد — این اثبات Atomicity است."
+</blockquote>
+
+<h2>بخش ۶ — Durability (۲:۴۰ — ۳:۱۰)</h2>
+
+<h3>دستورات در ترمینال Server A:</h3>
+<pre># کشتن سرور با Ctrl+C، سپس:
+python3 server.py   # راه‌اندازی مجدد</pre>
+
+<h3>دستورات در ترمینال Client VM:</h3>
+<pre>python3 client.py balance A1001</pre>
+
+<h3>روایت:</h3>
+<blockquote>
+"حالا سرور اصلی A را می‌کشیم و دوباره راه‌اندازی می‌کنیم. موجودی دقیقاً همان عدد قبلی است — هیچ چیز از دست نمی‌رود. چون تراکنش Commit شده روی Write-Ahead Log دیسک ثبت گردیده، هیچ داده‌ای از دست نرفته. این اثباتی از Durability است."
+</blockquote>
+
+<h2>بخش ۷ — نمایش لاگ‌ها (۳:۱۰ — ۳:۳۰)</h2>
+
+<h3>دستورات در ترمینال Server A:</h3>
+<pre>cat bank_server.log</pre>
+
+<h3>روایت پایانی:</h3>
+<blockquote>
+"هر درخواست، همراه با زمان، شناسه ریکوئست، IP کلاینت، اکشن، حساب، وضعیت و latency در فایل bank_server.log ذخیره شده است. تمامی خواسته‌های بخش اصلی تمرین با موفقیت اعمال شدند. از وقتی که وقت داده‌اید سپاس‌گزارم."
+</blockquote>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('pre').forEach(pre => {
+      const text = pre.innerText.trim();
+      if (!text) return;
+      const wrapper = document.createElement('div');
+      wrapper.className = 'code-block';
+      pre.parentNode.insertBefore(wrapper, pre);
+      wrapper.appendChild(pre);
+      const btn = document.createElement('button');
+      btn.className = 'copy-btn';
+      btn.innerText = '⧉';
+      btn.title = 'کپی کد';
+      btn.onclick = () => {
+        navigator.clipboard.writeText(text).then(() => {
+          btn.innerText = '✓';
+          btn.classList.add('copied');
+          setTimeout(() => { btn.innerText = '⧉'; btn.classList.remove('copied'); }, 1500);
+        });
+      };
+      wrapper.appendChild(btn);
+    });
+  });
+</script>
+
+</body>
+</html>

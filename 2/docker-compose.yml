@@ -1,0 +1,110 @@
+services:
+  db-a:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: bank
+      POSTGRES_PASSWORD: bank
+      POSTGRES_DB: bank
+    command:
+      - postgres
+      - -c
+      - max_prepared_transactions=100
+    volumes:
+      - db-a-data:/var/lib/postgresql/data
+      - ./db/init-a.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bank -d bank"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  db-b:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: bank
+      POSTGRES_PASSWORD: bank
+      POSTGRES_DB: bank
+    command:
+      - postgres
+      - -c
+      - max_prepared_transactions=100
+    volumes:
+      - db-b-data:/var/lib/postgresql/data
+      - ./db/init-b.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bank -d bank"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  bank-a1:
+    build: ./bank_server
+    environment:
+      DATABASE_URL: postgresql://bank:bank@db-a:5432/bank
+      REPLICA_ID: A1
+      SHARD_ID: A
+    ports:
+      - "8001:8000"
+    depends_on:
+      db-a:
+        condition: service_healthy
+    restart: "no"
+
+  bank-a2:
+    build: ./bank_server
+    environment:
+      DATABASE_URL: postgresql://bank:bank@db-a:5432/bank
+      REPLICA_ID: A2
+      SHARD_ID: A
+    ports:
+      - "8002:8000"
+    depends_on:
+      db-a:
+        condition: service_healthy
+    restart: "no"
+
+  bank-b1:
+    build: ./bank_server
+    environment:
+      DATABASE_URL: postgresql://bank:bank@db-b:5432/bank
+      REPLICA_ID: B1
+      SHARD_ID: B
+    ports:
+      - "8003:8000"
+    depends_on:
+      db-b:
+        condition: service_healthy
+    restart: "no"
+
+  bank-b2:
+    build: ./bank_server
+    environment:
+      DATABASE_URL: postgresql://bank:bank@db-b:5432/bank
+      REPLICA_ID: B2
+      SHARD_ID: B
+    ports:
+      - "8004:8000"
+    depends_on:
+      db-b:
+        condition: service_healthy
+    restart: "no"
+
+  gateway:
+    build: ./gateway
+    environment:
+      SHARD_MAP_PATH: /config/shard_map.json
+      HEALTH_INTERVAL: "2"
+    volumes:
+      - ./config/shard_map.json:/config/shard_map.json:ro
+    ports:
+      - "8080:8080"
+    depends_on:
+      - bank-a1
+      - bank-a2
+      - bank-b1
+      - bank-b2
+    restart: "no"
+
+volumes:
+  db-a-data:
+  db-b-data:

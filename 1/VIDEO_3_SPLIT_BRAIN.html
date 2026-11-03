@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>ویدیو ۳ — بونوس دوم: انقطاع شبکه و جلوگیری از Split-Brain (+۱۵٪)</title>
+<style>
+  @font-face {
+    font-family: 'Vazir';
+    src: url('./fonts/woff2/Vazir.woff2') format('woff2'), url('./fonts/woff/Vazir.woff') format('woff'), url('./fonts/ttf/Vazir.ttf') format('truetype');
+    font-weight: normal; font-style: normal;
+  }
+  @font-face {
+    font-family: 'Vazir';
+    src: url('./fonts/woff2/Vazir-Bold.woff2') format('woff2'), url('./fonts/woff/Vazir-Bold.woff') format('woff'), url('./fonts/ttf/Vazir-Bold.ttf') format('truetype');
+    font-weight: bold; font-style: normal;
+  }
+
+  @page { size: A4; margin: 1.6cm 1.5cm; }
+  * { box-sizing: border-box; }
+
+  body {
+    font-family: 'Vazir', Tahoma, sans-serif;
+    font-size: 10.5pt; line-height: 1.55; color: #222;
+    margin: 0; padding: 0; text-align: justify;
+    background: #fff;
+  }
+
+  @media screen {
+    body { max-width: 21cm; margin: 25px auto; padding: 30px 40px;
+           box-shadow: 0 0 10px rgba(0,0,0,0.15); border-radius: 4px; }
+  }
+
+  h1 { font-size: 16pt; font-weight: bold; color: #1a365d;
+       border-bottom: 2px solid #333; padding-bottom: 8px; margin: 0 0 12px 0; }
+  h2 { font-size: 12pt; font-weight: bold; color: #333;
+       border-bottom: 1px solid #ccc; padding-bottom: 4px; margin: 14px 0 8px; }
+  h3 { font-size: 10.5pt; font-weight: bold; color: #2d3748; margin: 10px 0 6px; }
+  p { margin: 6px 0; }
+  ul, ol { margin: 6px 0; padding-right: 22px; }
+  li { margin-bottom: 4px; }
+  blockquote { margin: 4px 14px; color: #444; font-style: italic; }
+  hr { border: none; border-top: 1px solid #ddd; margin: 16px 0; }
+
+  code { font-family: Consolas, monospace; font-size: 9pt; background: #f0f0f0;
+         padding: 1px 4px; border-radius: 3px; direction: ltr; display: inline-block; }
+
+  pre { font-family: Consolas, monospace; font-size: 9pt; background: #fafafa;
+        border: 1px solid #ddd; border-radius: 4px; padding: 8px 10px;
+        line-height: 1.4; direction: ltr; text-align: left;
+        overflow-x: auto; white-space: pre-wrap; margin: 6px 0; position: relative; }
+
+  .code-block { position: relative; margin: 8px 0; }
+  .code-block pre { margin: 0; }
+
+  .copy-btn {
+    position: absolute; top: 4px; right: 4px;
+    background: transparent; border: none; color: #bbb;
+    font-size: 13px; cursor: pointer; padding: 2px 6px; line-height: 1;
+    transition: color 0.15s, transform 0.1s; user-select: none; z-index: 2; opacity: 0;
+  }
+  .code-block:hover .copy-btn { opacity: 1; }
+  .copy-btn:hover { color: #2b6cb0; transform: scale(1.2); }
+  .copy-btn.copied { color: #38a169; }
+
+  .pdf-btn {
+    position: fixed; top: 16px; left: 16px;
+    background: #333; color: #fff; border: none; border-radius: 6px;
+    padding: 10px 18px; font-family: 'Vazir', sans-serif; font-size: 11pt;
+    cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+  }
+  .pdf-btn:hover { background: #555; }
+  @media print { .pdf-btn, .copy-btn { display: none; } }
+</style>
+</head>
+<body>
+
+<button class="pdf-btn" onclick="window.print()">💾 ذخیره به‌عنوان PDF</button>
+
+<h1>🎬 ویدیو ۳ — بونوس دوم: انقطاع شبکه و جلوگیری از دوپارگی مغز (Split-Brain - +۱۵٪)</h1>
+
+<p>
+این ویدیو برای نشان دادن سناریوی پیچیده بخش ۶ سند تمرین است:
+<strong>انقطاع واقعی شبکه بین ماشین‌های سرور با استفاده از iptables، رفتار سامانه حین انقطاع (رفتن سرور ایزوله به حالت Read-Only و رد تراکنش‌های نوشتن با خطای ۵۰۳ به دلیل فقدان حدنصاب Quorum، مجاز بودن استعلام موجودی)، پذیرش تراکنش‌ها توسط سرور واجد اکثریت، و در نهایت بازگرداندن اتصال شبکه و اثبات همگام‌سازی سالم داده‌ها بدون مغایرت (Healing).</strong>
+<br>
+مدت زمان تقریبی: <strong>حدود ۳ دقیقه</strong>
+</p>
+
+<h2>آماده‌سازی قبل از ضبط</h2>
+<ul>
+  <li><strong>Witness:</strong> در هاست با <code>python witness.py</code> در حال اجراست (.103:9000)</li>
+  <li><strong>Server A:</strong> در ترمینال با <code>python server.py</code> در حال اجراست (.101:8000)</li>
+  <li><strong>Server B:</strong> در ترمینال با <code>python server.py</code> در حال اجراست (.104:8000)</li>
+  <li><strong>Client VM:</strong> ترمینال آماده است (.102)</li>
+</ul>
+
+<p><strong>نکته کلیدی:</strong> در حالت عادی، سرور B با سرور A و Witness در ارتباط است (۳ رأی). برای شبیه‌سازی ایزوله شدن کامل سرور B، اتصال آن را هم به سرور A و هم به Witness مسدود می‌کنیم تا رأی آن ۱ از ۳ شود و فاقد حدنصاب (No Quorum) گردد.</p>
+
+<div style="background:#fff5f5;border:1px solid #fc8181;border-radius:6px;padding:10px 14px;margin:12px 0;">
+<h3 style="margin-top:0;">هشدار ترتیب ضبط</h3>
+<p style="margin-bottom:0;">
+این سناریو فرض می‌کند Server A همچنان primary و Server B استندبای است. اگر ویدیوی
+Failover (+۱۰٪) را قبلاً ضبط کرده‌اید، B اکنون primary شده و A رپلیکای آن است. در این صورت
+یا این ویدیو را <em>قبل</em> از ویدیوی Failover ضبط کنید، یا دیتابیس B را با
+<code>pg_basebackup</code> از A دوباره به استندبای تبدیل کنید (بخش ۳.۳ گزارش).
+</p>
+</div>
+
+<div style="background:#f7fafc;border:1px solid #cbd5e0;border-radius:6px;padding:10px 14px;margin:12px 0;">
+<h3 style="margin-top:0;">منطق دقیق Witness و Quorum (برای روایت)</h3>
+<ol>
+  <li>هر سرور برای خودش <strong>یک رأی ثابت</strong> دارد.</li>
+  <li>اگر به <strong>سرور همتا</strong> وصل شود (<code>GET /health</code>) یک رأی می‌گیرد.</li>
+  <li>اگر <strong>Witness</strong> جواب دهد (<code>GET /ping</code>) یک رأی می‌گیرد.</li>
+  <li><strong>حدنصاب = ۲ رأی از ۳.</strong> کمتر از آن یعنی فقط‌خواندنی و رد نوشتن با خطای ۵۰۳.</li>
+</ol>
+<p style="margin-bottom:0;">
+در این دمو، Server B را از <em>هر دو</em> نود دیگر قطع می‌کنیم، پس فقط ۱ رأی دارد و read-only می‌شود.
+Server A همچنان Witness را می‌بیند: <code>۱ (خود) + ۱ (Witness) = ۲</code> → مجاز به نوشتن.
+Witness هیچ داده‌ای نگه نمی‌دارد؛ فقط داور است.
+</p>
+</div>
+
+<div style="background:#fffaf0;border:1px solid #f6ad55;border-radius:6px;padding:10px 14px;margin:12px 0;">
+<h3 style="margin-top:0;">نکته عمیق (اختیاری برای نمره بیشتر)</h3>
+<p style="margin-bottom:0;">
+شمارش سادهٔ رأی یک نقطهٔ کور دارد: اگر <em>فقط</em> لینک A↔B قطع شود ولی هر دو به Witness دسترسی داشته باشند،
+هر دو <code>۲</code> رأی می‌گیرند و هر دو خود را primary می‌دانند. برای بستن این سوراخ، حالت
+<strong>Lease</strong> اضافه شده است: Witness یک «اجاره‌نامهٔ انحصاری» به فقط یک سرور می‌دهد و سرور
+تنها تا زمانی می‌نویسد که دارندهٔ اجاره باشد. این حالت اختیاری است و با
+<code>ENABLE_LEASE=true</code> فعال می‌شود (بخش ۵ در انتها).
+</p>
+</div>
+
+<hr>
+
+<h2>بخش ۱ — معرفی سناریوی Split-Brain و مدل حدنصاب (۰:۰۰ — ۰:۳۵)</h2>
+
+<h3>متن پیشنهادی برای روایت صوتی:</h3>
+<blockquote>
+"در این بخش، سناریوی Extreme Bonus با ارزش ۱۵٪ نمره را بررسی می‌کنیم: انقطاع شبکه (Network Partition) و جلوگیری از دوپارگی مغز (Split-Brain). اگر ارتباط بین دو سرور قطع شود اما هر دو روشن بمانند، ممکن است هر دو سرور خود را Master دانسته و شروع به ثبت تراکنش‌های متناقض کنند. سامانه ما با مدل حدنصاب اکثریت ۳ عضوی (Quorum = ۲ از ۳ شامل سرور A، سرور B و گره داور Witness) از این فاجعه جلوگیری می‌کند. ابتدا وضعیت اولیه هر دو سرور را بررسی می‌کنیم."
+</blockquote>
+
+<h3>اجرا در ترمینال Client VM:</h3>
+<pre>curl http://192.168.56.101:8000/quorum-status
+curl http://192.168.56.104:8000/quorum-status</pre>
+
+<p>هر دو سرور مقدار <code>{"has_quorum": true, "mode": "primary"}</code> برمی‌گردانند.</p>
+
+<h2>بخش ۲ — ایجاد انقطاع واقعی شبکه با iptables (۰:۳۵ — ۱:۱۵)</h2>
+
+<p>به ترمینال <strong>Server B</strong> رفته و دستورات زیر را برای قطع کامل ارتباط با سرور A و Witness اجرا کنید:</p>
+
+<h3>دستورات در ترمینال Server B:</h3>
+<pre>sudo iptables -A INPUT -s 192.168.56.101 -j DROP
+sudo iptables -A OUTPUT -d 192.168.56.101 -j DROP
+sudo iptables -A INPUT -s 192.168.56.103 -j DROP
+sudo iptables -A OUTPUT -d 192.168.56.103 -j DROP</pre>
+
+<h3>روایت:</h3>
+<blockquote>
+"با استفاده از فایروال iptables در سطح سیستم‌عامل سرور B، ارتباط آن را با سرور A و گره Witness قطع کردیم. این یک انقطاع فیزیکی واقعی است و نه صرفاً بستن پروسه پایتون. اکنون سرور B کاملاً در شبکه تنها مانده و فقط ۱ رأی از ۳ رأی را در اختیار دارد."
+</blockquote>
+
+<h2>بخش ۳ — اثبات حالت فقط‌خواندنی (Read-Only) روی Server B ایزوله (۱:۱۵ — ۲:۰۰)</h2>
+
+<h3>۱. بررسی وضعیت حدنصاب از کلاینت:</h3>
+<pre>curl http://192.168.56.104:8000/quorum-status</pre>
+<p>خروجی: <code>{"has_quorum": false, "mode": "read-only"}</code></p>
+
+<h3>۲. تلاش برای واریز به Server B ایزوله (باید رد شود):</h3>
+<pre>curl -X POST http://192.168.56.104:8000/transaction \
+  -H "Content-Type: application/json" \
+  -d '{"action":"deposit","account":"A1001","amount":50}'</pre>
+<p>خروجی: <code>HTTP 503 {"status": "error", "message": "no quorum: server in read-only mode..."}</code></p>
+
+<h3>۳. استعلام موجودی از Server B (باید کار کند):</h3>
+<pre>curl -X POST http://192.168.56.104:8000/transaction \
+  -H "Content-Type: application/json" \
+  -d '{"action":"balance","account":"A1001"}'</pre>
+<p>خروجی: <code>HTTP 200 {"status": "success", "balance": ...}</code></p>
+
+<h3>۴. پذیرش تراکنش توسط Server A (چون حدنصاب ۲ از ۳ دارد):</h3>
+<pre>python3 client.py deposit A1001 100</pre>
+
+<h3>روایت:</h3>
+<blockquote>
+"مشاهده می‌کنید که سرور B تشخیص داده حدنصاب ندارد و حالت read-only گرفته است. وقتی سعی می‌کنیم روی سرور B واریز انجام دهیم، بلافاصله با خطای ۵۰۳ 'no quorum' تراکنش را ریجکت می‌کند تا اطلاعات دوشاخه نشود؛ اما استعلام موجودی همچنان کار می‌کند. در مقابل، سرور A چون به گره Witness دسترسی دارد و اکثریت را داراست، تراکنش‌های واریز را به درستی می‌پذیرد. این اثبات قطعی ممانعت از Split-Brain است."
+</blockquote>
+
+<h2>بخش ۴ — بازگرداندن شبکه و همگام‌سازی کامل (Recovery — ۲:۰۰ — ۲:۴۵)</h2>
+
+<p>به ترمینال <strong>Server B</strong> رفته و فایروال را پاک‌سازی کنید:</p>
+
+<h3>دستور در ترمینال Server B:</h3>
+<pre>sudo iptables -F</pre>
+
+<p>۵ ثانیه صبر کنید تا شبکه متصل و replication همگام شود، سپس در <strong>Client VM</strong> دستورات زیر را اجرا کنید:</p>
+
+<h3>دستورات در ترمینال Client VM:</h3>
+<pre># بررسی بازگشت حدنصاب
+curl http://192.168.56.101:8000/quorum-status
+curl http://192.168.56.104:8000/quorum-status
+
+# استعلام موجودی از هر دو سرور — باید کاملاً یکسان باشند
+curl -X POST http://192.168.56.101:8000/transaction \
+  -H "Content-Type: application/json" \
+  -d '{"action":"balance","account":"A1001"}'
+
+curl -X POST http://192.168.56.104:8000/transaction \
+  -H "Content-Type: application/json" \
+  -d '{"action":"balance","account":"A1001"}'</pre>
+
+<h3>روایت پایانی:</h3>
+<blockquote>
+"با دستور iptables -F اتصال شبکه را بازگرداندیم. بلافاصله هر دو سرور وضعیت has_quorum: true را به دست آوردند. تغییراتی که حین انقطاع روی سرور A ثبت شده بود، از طریق Streaming Replication به سرور B منتقل شد. همان‌طور که می‌بینید، موجودی هر دو سرور دقیقاً یکسان است. سامانه بعد از انقطاع، به طور کامل و بدون کوچک‌ترین تداخل داده‌ای خود را بازیابی کرد. متشکرم."
+</blockquote>
+
+<h2>بخش ۵ (اختیاری) — اثبات با Lease: وقتی هر دو سرور Witness را می‌بینند (۲:۴۵ — ۳:۳۰)</h2>
+
+<p>
+این بخش اختیاری نشان می‌دهد چرا «شمارش رأی» به‌تنهایی کافی نیست و Lease چطور آن را کامل می‌کند.
+</p>
+
+<h3>۱. فعال‌سازی روی هر دو سرور (در فایل <code>.env</code>):</h3>
+<pre>ENABLE_LEASE=true
+NODE_ID=server-a          # روی Server B: server-b
+LEASE_TTL=6
+LEASE_RENEW_INTERVAL=2</pre>
+
+<p>هر دو سرور را ری‌استارت کنید. سپس رهبر را ببینید:</p>
+<pre>curl http://192.168.56.101:8000/quorum-status
+curl http://192.168.56.104:8000/quorum-status</pre>
+<p>
+انتظار: روی A مقدار <code>"lease": {"is_leader": true, "leader": "server-a"}</code> و روی B
+<code>"is_leader": false</code> با <code>mode: read-only</code>.
+</p>
+
+<h3>۲. حالا فقط لینک A↔B را قطع کنید (هر دو به Witness وصل می‌مانند):</h3>
+<pre>sudo iptables -A INPUT -s 192.168.56.101 -j DROP
+sudo iptables -A OUTPUT -d 192.168.56.101 -j DROP</pre>
+
+<p>هر دو سرور <code>has_quorum: true</code> دارند، ولی فقط A اجازهٔ نوشتن دارد:</p>
+<pre>curl -X POST http://192.168.56.104:8000/transaction \
+  -H "Content-Type: application/json" \
+  -d '{"action":"deposit","account":"A1001","amount":50}'</pre>
+<p>
+خروجی: <code>HTTP 503 {"message": "not primary: server in read-only mode (lease not held)"}</code>
+— یعنی حتی با داشتن ۲ رأی، B نمی‌تواند بنویسد، چون اجاره‌نامه دست A است.
+</p>
+
+<h3>۳. حالا Server A را ببندید (Ctrl+C):</h3>
+<p>
+حداکثر بعد از <code>LEASE_TTL</code> ثانیه، B اجاره را می‌گیرد و primary می‌شود:
+</p>
+<pre>curl http://192.168.56.104:8000/quorum-status</pre>
+<p>انتظار: <code>"lease": {"is_leader": true, "leader": "server-b"}</code> و <code>mode: primary</code>.</p>
+
+<h3>پاک‌سازی:</h3>
+<pre>sudo iptables -F</pre>
+
+<blockquote>
+"این بخش نشان داد که Lease یک انتخاب انحصاری است، نه شمارش محلی رأی: در هر لحظه فقط یک دارندهٔ
+اجاره وجود دارد. اگر Witness از دسترس خارج شود، سرورها پس از پایان TTL به حالت فقط‌خواندنی
+می‌روند — یعنی سامانه ترجیح می‌دهد نوشتن را متوقف کند تا داده دوشاخه نشود."
+</blockquote>
+
+<hr>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('pre').forEach(pre => {
+      const text = pre.innerText.trim();
+      if (!text) return;
+      const wrapper = document.createElement('div');
+      wrapper.className = 'code-block';
+      pre.parentNode.insertBefore(wrapper, pre);
+      wrapper.appendChild(pre);
+      const btn = document.createElement('button');
+      btn.className = 'copy-btn';
+      btn.innerText = '⧉';
+      btn.title = 'کپی کد';
+      btn.onclick = () => {
+        navigator.clipboard.writeText(text).then(() => {
+          btn.innerText = '✓';
+          btn.classList.add('copied');
+          setTimeout(() => { btn.innerText = '⧉'; btn.classList.remove('copied'); }, 1500);
+        });
+      };
+      wrapper.appendChild(btn);
+    });
+  });
+</script>
+
+</body>
+</html>
