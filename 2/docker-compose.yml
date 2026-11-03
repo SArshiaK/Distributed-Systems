@@ -140,6 +140,29 @@ services:
       - coordinator
     restart: "no"
 
+  console:
+    build: ./console
+    environment:
+      GATEWAY_URL: http://gateway:8080
+      COORDINATOR_URL: http://coordinator:8090
+      DB_A_URL: postgresql://bank:bank@db-a:5432/bank
+      DB_B_URL: postgresql://bank:bank@db-b:5432/bank
+      DB_COORD_URL: postgresql://bank:bank@db-coord:5432/coord
+    ports:
+      - "3000:3000"
+    depends_on:
+      gateway:
+        condition: service_started
+      coordinator:
+        condition: service_started
+      db-a:
+        condition: service_healthy
+      db-b:
+        condition: service_healthy
+      db-coord:
+        condition: service_healthy
+    restart: "no"
+
 volumes:
   db-a-data:
   db-b-data:
