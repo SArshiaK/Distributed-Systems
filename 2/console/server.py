@@ -122,28 +122,62 @@ def fetch_accounts(url: str, shard: str) -> list[dict]:
     ]
 
 
-def fetch_coord_recent(limit: int = 8) -> list[dict]:
+def fetch_coord_snapshot(limit: int = 12) -> dict[str, Any]:
+    """Live Coord DB view: recent distributed txs + their participants."""
     try:
         with psycopg.connect(DB_COORD_URL, row_factory=dict_row) as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     "SELECT transaction_id, from_account, to_account, amount, "
-                    "from_shard, to_shard, status, updated_at "
+                    "from_shard, to_shard, status, created_at, updated_at "
                     "FROM distributed_transactions "
                     "ORDER BY updated_at DESC LIMIT %s",
                     (limit,),
                 )
-                rows = cur.fetchall()
-        out = []
-        for r in rows:
+                txs = list(cur.fetchall())
+                tx_ids = [t["transaction_id"] for t in txs]
+                participants: list[dict] = []
+                if tx_ids:
+                    cur.execute(
+                        "SELECT transaction_id, shard_id, operation, account, vote, ack "
+                        "FROM transaction_participants "
+                        "WHERE transaction_id = ANY(%s) "
+                        "ORDER BY transaction_id, shard_id",
+                        (tx_ids,),
+                    )
+                    participants = list(cur.fetchall())
+                cur.execute("SELECT COUNT(*) AS n FROM distributed_transactions")
+                total = int(cur.fetchone()["n"])
+                cur.execute(
+                    "SELECT status, COUNT(*) AS n FROM distributed_transactions "
+                    "GROUP BY status ORDER BY status"
+                )
+                by_status = {r["status"]: int(r["n"]) for r in cur.fetchall()}
+
+        out_txs = []
+        for r in txs:
             item = dict(r)
             item["amount"] = float(item["amount"])
+            item["created_at"] = item["created_at"].isoformat()
             item["updated_at"] = item["updated_at"].isoformat()
-            out.append(item)
-        return out
-    except Exception:
-        return []
+            out_txs.append(item)
 
+        return {
+            "ok": True,
+            "total": total,
+            "by_status": by_status,
+            "transactions": out_txs,
+            "participants": participants,
+        }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "error": str(exc),
+            "total": 0,
+            "by_status": {},
+            "transactions": [],
+            "participants": [],
+        }
 
 def _fmt_ports(ports: Optional[list[dict]]) -> list[str]:
     if not ports:
@@ -493,7 +527,9 @@ def snapshot():
             "A": accounts_a,
             "B": accounts_b,
         },
-        "recent_2pc": fetch_coord_recent(),
+        "coord_db": (coord_snap := fetch_coord_snapshot()),
+        # Keep alias for older UI builds.
+        "recent_2pc": coord_snap.get("transactions", []),
     }
 
 
@@ -606,10 +642,31 @@ def _enrich_flow_hints(body: TxBody, data: dict, *, gateway_unreachable: bool = 
             data["_action"] = action
             data["_ok"] = False
             return data
+        # Detailed 2PC path including durable Coord DB writes.
         if ok or decision == "ABORT" or pending or data.get("mode") == "cross_shard":
             reached.extend(
-                ["replica_from", "db_from", "replica_to", "db_to", "db_coord"]
+                [
+                    "db_coord_create",  # INITIATED + participants
+                    "replica_from",
+                    "db_from",
+                    "db_coord_vote_from",  # vote persist
+                    "replica_to",
+                    "db_to",
+                    "db_coord_vote_to",  # vote persist
+                    "db_coord_decision",  # COMMIT_DECIDED / ABORT_DECIDED
+                ]
             )
+            if ok or decision == "ABORT":
+                reached.extend(
+                    [
+                        "replica_from_decide",
+                        "replica_to_decide",
+                        "db_coord_complete",  # COMPLETED + acks
+                    ]
+                )
+            elif pending or status == "pending":
+                # Decision durable; waiting on participant acks.
+                reached.append("db_coord_pending")
     else:
         if fail_at == "replica":
             reached.append("replica")

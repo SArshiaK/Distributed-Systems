@@ -118,10 +118,12 @@
                 <path id="path-gw-b2" class="flow-path" d="M450,120 C520,170 650,190 680,220" />
                 <path id="path-coord-a" class="flow-path" d="M700,120 C700,160 300,160 270,220" />
                 <path id="path-coord-b" class="flow-path" d="M740,120 C760,160 650,180 630,220" />
+                <path id="path-coord-db" class="flow-path" d="M700,120 C700,260 520,420 480,460" />
                 <path id="path-a1-db" class="flow-path" d="M220,280 C220,330 200,350 200,380" />
                 <path id="path-a2-db" class="flow-path" d="M320,280 C300,330 220,350 210,380" />
                 <path id="path-b1-db" class="flow-path" d="M580,280 C580,330 700,350 720,380" />
                 <path id="path-b2-db" class="flow-path" d="M680,280 C700,330 740,350 740,380" />
+                <path id="path-db-coord-back" class="flow-path" d="M480,460 C520,400 680,220 700,120" />
 
                 <!-- nodes -->
                 <g id="node-client" data-node="client">
@@ -212,9 +214,43 @@
               </div>
             </div>
 
-            <div class="panel">
-              <h2>Recent 2PC transactions</h2>
-              <div class="tx-list" id="txList"></div>
+            <div class="panel db-panel coord">
+              <div class="docker-panel-head">
+                <h3>Coord DB · live</h3>
+                <span class="muted-note" id="coordDbMeta">—</span>
+              </div>
+              <div class="status-row" id="coordDbCounts" aria-live="polite"></div>
+              <div class="table-scroll" style="margin-top: 12px">
+                <table class="docker-table coord-table">
+                  <thead>
+                    <tr>
+                      <th>Tx</th>
+                      <th>From → To</th>
+                      <th>Amount</th>
+                      <th>Shards</th>
+                      <th>Status</th>
+                      <th>Updated</th>
+                    </tr>
+                  </thead>
+                  <tbody id="coordTxTable"></tbody>
+                </table>
+              </div>
+              <h3 class="coord-subhead">Participants · votes / acks</h3>
+              <div class="table-scroll">
+                <table class="docker-table coord-table">
+                  <thead>
+                    <tr>
+                      <th>Tx</th>
+                      <th>Shard</th>
+                      <th>Op</th>
+                      <th>Account</th>
+                      <th>Vote</th>
+                      <th>Ack</th>
+                    </tr>
+                  </thead>
+                  <tbody id="coordPartTable"></tbody>
+                </table>
+              </div>
             </div>
           </section>
         </div>

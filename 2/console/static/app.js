@@ -8,6 +8,8 @@
   const liveStatus = $("#liveStatus");
   const sendBtn = $("#sendBtn");
   const balances = { A: new Map(), B: new Map() };
+  const coordTxPrev = new Map(); // tx_id -> status|updated_at
+  const coordPartPrev = new Map(); // tx|shard -> vote|ack
   let pollTimer;
   let dockerPollTimer;
   let activeTab = "lab";
@@ -109,19 +111,106 @@
     });
   }
 
-  function renderTx(list) {
-    const root = $("#txList");
-    if (!list?.length) {
-      root.innerHTML = `<div class="tx-item">No cross-shard transactions yet.</div>`;
+  function shortTx(id) {
+    return String(id || "").slice(0, 8);
+  }
+
+  function fmtTime(iso) {
+    if (!iso) return "—";
+    try {
+      return new Date(iso).toLocaleTimeString();
+    } catch {
+      return iso;
+    }
+  }
+
+  function renderCoordDb(coord) {
+    const meta = $("#coordDbMeta");
+    const counts = $("#coordDbCounts");
+    const txBody = $("#coordTxTable");
+    const partBody = $("#coordPartTable");
+    if (!meta || !txBody || !partBody) return;
+
+    if (!coord || coord.ok === false) {
+      meta.textContent = coord?.error ? `error · ${coord.error}` : "unavailable";
+      counts.innerHTML = "";
+      txBody.innerHTML = `<tr><td colspan="6">Coord DB unavailable.</td></tr>`;
+      partBody.innerHTML = `<tr><td colspan="6">—</td></tr>`;
       return;
     }
-    root.innerHTML = list
+
+    meta.textContent = `${coord.total ?? 0} total transactions`;
+    const by = coord.by_status || {};
+    const pills = Object.keys(by)
+      .sort()
       .map(
-        (t) => `<div class="tx-item"><strong>${t.status}</strong> · ${t.from_account} → ${
-          t.to_account
-        } · ${t.amount} · <code>${t.transaction_id.slice(0, 8)}</code></div>`
-      )
-      .join("");
+        (k) =>
+          `<span class="pill"><span class="dot" aria-hidden="true"></span>${escapeHtml(
+            k
+          )} ${by[k]}</span>`
+      );
+    counts.innerHTML =
+      pills.join("") ||
+      `<span class="pill"><span class="dot" aria-hidden="true"></span>empty</span>`;
+
+    const txs = coord.transactions || [];
+    if (!txs.length) {
+      txBody.innerHTML = `<tr><td colspan="6">No distributed transactions yet. Run a cross-shard transfer.</td></tr>`;
+    } else {
+      txBody.innerHTML = txs
+        .map((t) => {
+          const key = t.transaction_id;
+          const sig = `${t.status}|${t.updated_at}`;
+          const prev = coordTxPrev.get(key);
+          const flash = prev != null && prev !== sig;
+          coordTxPrev.set(key, sig);
+          const st = String(t.status || "").toLowerCase();
+          return `<tr class="${flash ? "flash" : ""}">
+            <td class="mono">${escapeHtml(shortTx(t.transaction_id))}</td>
+            <td>${escapeHtml(t.from_account)} → ${escapeHtml(t.to_account)}</td>
+            <td>${Number(t.amount).toFixed(2)}</td>
+            <td>${escapeHtml(t.from_shard)} → ${escapeHtml(t.to_shard)}</td>
+            <td><span class="status-chip ${escapeHtml(st)}">${escapeHtml(
+              t.status
+            )}</span></td>
+            <td>${escapeHtml(fmtTime(t.updated_at))}</td>
+          </tr>`;
+        })
+        .join("");
+    }
+
+    const parts = coord.participants || [];
+    if (!parts.length) {
+      partBody.innerHTML = `<tr><td colspan="6">No participants yet.</td></tr>`;
+    } else {
+      // Keep participant rows aligned with currently shown txs.
+      const shown = new Set(txs.map((t) => t.transaction_id));
+      const filtered = parts.filter((p) => shown.has(p.transaction_id));
+      partBody.innerHTML = filtered
+        .map((p) => {
+          const key = `${p.transaction_id}|${p.shard_id}`;
+          const sig = `${p.vote || ""}|${p.ack || ""}`;
+          const prev = coordPartPrev.get(key);
+          const flash = prev != null && prev !== sig;
+          coordPartPrev.set(key, sig);
+          const vote = p.vote || "—";
+          const voteClass =
+            String(vote).toUpperCase() === "YES"
+              ? "vote-yes"
+              : String(vote).toUpperCase() === "NO"
+                ? "vote-no"
+                : "";
+          return `<tr class="${flash ? "flash" : ""}">
+            <td class="mono">${escapeHtml(shortTx(p.transaction_id))}</td>
+            <td>${escapeHtml(p.shard_id)}</td>
+            <td>${escapeHtml(p.operation)}</td>
+            <td>${escapeHtml(p.account)}</td>
+            <td class="${voteClass}">${escapeHtml(vote)}</td>
+            <td>${escapeHtml(p.ack || "—")}</td>
+          </tr>`;
+        })
+        .join("");
+    }
   }
 
   async function refreshSnapshot() {
@@ -130,7 +219,7 @@
     renderStatus(snap);
     renderTable("tableA", snap.databases?.A || [], "A");
     renderTable("tableB", snap.databases?.B || [], "B");
-    renderTx(snap.recent_2pc || []);
+    renderCoordDb(snap.coord_db || { transactions: snap.recent_2pc || [], ok: true });
     return snap;
   }
 
@@ -182,13 +271,162 @@
     return hops;
   }
 
+  function crossReplica(shard) {
+    return shard === "A" ? "A1" : "B1";
+  }
+
+  function pushCoordDb(hops, label, fromCoordinator = true) {
+    hops.push({
+      node: "node-db-coord",
+      path: fromCoordinator ? "path-coord-db" : "path-coord-db",
+      label,
+      kind: "coord-db",
+    });
+  }
+
+  function pushBackToCoordinator(hops, label) {
+    hops.push({
+      node: "node-coordinator",
+      path: "path-db-coord-back",
+      label,
+    });
+  }
+
+  function expandRouteStep(step, hops, ctx) {
+    const { fromShard, toShard, failAt, decision } = ctx;
+    const fromRid = crossReplica(fromShard);
+    const toRid = crossReplica(toShard);
+    const decide = decision === "ABORT" ? "ABORT" : "COMMIT";
+
+    switch (step) {
+      case "client":
+        hops.push({ node: "node-client", path: null, label: "Client request" });
+        break;
+      case "gateway":
+        hops.push({
+          node: "node-gateway",
+          path: "path-client-gw",
+          label: "Gateway routes request",
+          failed: failAt === "gateway",
+        });
+        break;
+      case "coordinator":
+        hops.push({
+          node: "node-coordinator",
+          path: "path-gw-coord",
+          label: "Coordinator starts 2PC",
+          failed: failAt === "coordinator",
+        });
+        break;
+      case "db_coord_create":
+        pushCoordDb(hops, "Coord DB · create tx (INITIATED)");
+        pushBackToCoordinator(hops, "Coordinator · begin PREPARE");
+        break;
+      case "replica_from":
+        hops.push({
+          node: replicaNodeId(fromRid),
+          path: fromShard === "A" ? "path-coord-a" : "path-coord-b",
+          label: `PREPARE debit on shard ${fromShard}`,
+        });
+        break;
+      case "db_from":
+        hops.push({
+          node: fromShard === "A" ? "node-db-a" : "node-db-b",
+          path: fromShard === "A" ? "path-a1-db" : "path-b1-db",
+          label: `Shard ${fromShard} DB · PREPARE TRANSACTION`,
+        });
+        break;
+      case "db_coord_vote_from":
+        hops.push({
+          node: "node-coordinator",
+          path: null,
+          label: "Coordinator collects vote",
+        });
+        pushCoordDb(hops, `Coord DB · store vote (${fromShard})`);
+        pushBackToCoordinator(hops, "Coordinator continues PREPARE");
+        break;
+      case "replica_to":
+        hops.push({
+          node: replicaNodeId(toRid),
+          path: toShard === "A" ? "path-coord-a" : "path-coord-b",
+          label: `PREPARE credit on shard ${toShard}`,
+        });
+        break;
+      case "db_to":
+        hops.push({
+          node: toShard === "A" ? "node-db-a" : "node-db-b",
+          path: toShard === "A" ? "path-a1-db" : "path-b1-db",
+          label: `Shard ${toShard} DB · PREPARE TRANSACTION`,
+        });
+        break;
+      case "db_coord_vote_to":
+        hops.push({
+          node: "node-coordinator",
+          path: null,
+          label: "Coordinator collects vote",
+        });
+        pushCoordDb(hops, `Coord DB · store vote (${toShard})`);
+        break;
+      case "db_coord_decision":
+        pushBackToCoordinator(hops, "Coordinator decides");
+        pushCoordDb(hops, `Coord DB · durable ${decide}_DECIDED`);
+        pushBackToCoordinator(hops, `Coordinator sends ${decide}`);
+        break;
+      case "replica_from_decide":
+        hops.push({
+          node: replicaNodeId(fromRid),
+          path: fromShard === "A" ? "path-coord-a" : "path-coord-b",
+          label: `${decide} on shard ${fromShard}`,
+        });
+        break;
+      case "replica_to_decide":
+        hops.push({
+          node: replicaNodeId(toRid),
+          path: toShard === "A" ? "path-coord-a" : "path-coord-b",
+          label: `${decide} on shard ${toShard}`,
+        });
+        break;
+      case "db_coord_complete":
+        hops.push({
+          node: "node-coordinator",
+          path: null,
+          label: "Coordinator records acks",
+        });
+        pushCoordDb(hops, "Coord DB · COMPLETED");
+        break;
+      case "db_coord_pending":
+        pushCoordDb(hops, "Coord DB · COMMIT_DECIDED (waiting acks)");
+        break;
+      case "replica": {
+        const rid = replicaIdFromResult(ctx.result, fromShard);
+        const { pathToRep } = replicaPathIds(rid);
+        hops.push({
+          node: replicaNodeId(rid),
+          path: pathToRep,
+          label: `Replica ${rid}`,
+          failed: failAt === "replica",
+        });
+        break;
+      }
+      case "db": {
+        const rid = replicaIdFromResult(ctx.result, fromShard);
+        const { pathToDb, db } = replicaPathIds(rid);
+        hops.push({ node: db, path: pathToDb, label: "Shard database" });
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
   function buildHopPlan(payload, result) {
     const action = payload.action;
     const fromShard = shardOfAccount(payload.account);
     const toShard = shardOfAccount(payload.to_account);
     const route = Array.isArray(result._route) ? result._route : null;
     const failAt = result._fail_at || null;
-    const hops = [{ node: "node-client", path: null }];
+    const decision = String(result.decision || "").toUpperCase();
+    const hops = [];
 
     const wantsCross =
       action === "transfer" &&
@@ -196,81 +434,32 @@
       toShard &&
       fromShard !== toShard;
 
-    // Prefer server-provided reachability so animation never invents hops past a break.
+    const ctx = { fromShard, toShard, failAt, decision, result };
+
     if (route) {
-      if (route.includes("gateway")) {
-        hops.push({
-          node: "node-gateway",
-          path: "path-client-gw",
-          failed: failAt === "gateway",
-        });
+      for (const step of route) {
+        expandRouteStep(step, hops, ctx);
+        if (
+          (step === "gateway" && failAt === "gateway") ||
+          (step === "coordinator" && failAt === "coordinator") ||
+          (step === "replica" && failAt === "replica")
+        ) {
+          break;
+        }
       }
-      if (failAt === "gateway") return hops;
-
-      if (route.includes("coordinator") || failAt === "coordinator") {
-        hops.push({
-          node: "node-coordinator",
-          path: "path-gw-coord",
-          failed: failAt === "coordinator",
-        });
-      }
-      if (failAt === "coordinator") return hops;
-
-      if (route.includes("replica") || failAt === "replica") {
-        const rid = replicaIdFromResult(result, fromShard);
-        const { pathToRep } = replicaPathIds(rid);
-        hops.push({
-          node: replicaNodeId(rid),
-          path: pathToRep,
-          failed: failAt === "replica",
-        });
-        if (failAt === "replica") return hops;
-      }
-
-      if (route.includes("db") && !route.includes("replica_from")) {
-        const rid = replicaIdFromResult(result, fromShard);
-        const { pathToDb, db } = replicaPathIds(rid);
-        hops.push({ node: db, path: pathToDb });
-      }
-
-      if (route.includes("replica_from")) {
-        hops.push({
-          node: replicaNodeId(fromShard === "A" ? "A1" : "B1"),
-          path: fromShard === "A" ? "path-coord-a" : "path-coord-b",
-        });
-      }
-      if (route.includes("db_from")) {
-        hops.push({
-          node: fromShard === "A" ? "node-db-a" : "node-db-b",
-          path: fromShard === "A" ? "path-a1-db" : "path-b1-db",
-        });
-      }
-      if (route.includes("replica_to")) {
-        hops.push({
-          node: replicaNodeId(toShard === "A" ? "A1" : "B1"),
-          path: toShard === "A" ? "path-coord-a" : "path-coord-b",
-        });
-      }
-      if (route.includes("db_to")) {
-        hops.push({
-          node: toShard === "A" ? "node-db-a" : "node-db-b",
-          path: toShard === "A" ? "path-a1-db" : "path-b1-db",
-        });
-      }
-      if (route.includes("db_coord")) {
-        hops.push({ node: "node-db-coord", path: null });
-      }
+      if (!hops.length) hops.push({ node: "node-client", path: null });
       return hops;
     }
 
     // Fallback if older response without hints.
-    hops.push({ node: "node-gateway", path: "path-client-gw" });
+    hops.push({ node: "node-client", path: null, label: "Client request" });
+    hops.push({ node: "node-gateway", path: "path-client-gw", label: "Gateway" });
     const msg = String(result.message || "").toLowerCase();
     if (msg.includes("gateway unreachable")) {
       return markFailed(hops, "node-gateway");
     }
     if (wantsCross) {
-      hops.push({ node: "node-coordinator", path: "path-gw-coord" });
+      hops.push({ node: "node-coordinator", path: "path-gw-coord", label: "Coordinator" });
       if (msg.includes("coordinator unreachable")) {
         return markFailed(hops, "node-coordinator");
       }
@@ -288,6 +477,7 @@
       hops.forEach((h) => {
         activate([h.node]);
         if (h.path) lit([h.path]);
+        if (h.label) setLive(h.label);
         if (h.failed) {
           const card = nodeRect(h.node);
           if (card) card.classList.add("failed-hop");
@@ -300,11 +490,14 @@
     gsap.set(packet, { opacity: 1 });
     const tl = gsap.timeline();
     for (const hop of hops) {
+      if (hop.label) {
+        tl.add(() => setLive(hop.label));
+      }
       activate([hop.node]);
       if (hop.path) {
         lit([hop.path]);
         tl.to(packet, {
-          duration: 0.55,
+          duration: hop.kind === "coord-db" ? 0.45 : 0.5,
           ease: "power2.inOut",
           motionPath: {
             path: `#${hop.path}`,
@@ -318,7 +511,7 @@
         if (card) {
           const b = card.getBBox();
           tl.to(packet, {
-            duration: 0.35,
+            duration: 0.3,
             ease: "power2.out",
             attr: { cx: b.x + b.width / 2, cy: b.y + b.height / 2 },
           });
@@ -338,7 +531,13 @@
         } else {
           tl.to(
             card,
-            { scale: 1.03, transformOrigin: "50% 50%", duration: 0.12, yoyo: true, repeat: 1 },
+            {
+              scale: hop.kind === "coord-db" ? 1.06 : 1.03,
+              transformOrigin: "50% 50%",
+              duration: 0.12,
+              yoyo: true,
+              repeat: hop.kind === "coord-db" ? 2 : 1,
+            },
             "<"
           );
         }

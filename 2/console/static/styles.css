@@ -614,6 +614,65 @@ button:focus-visible {
   color: var(--color-shard-b);
 }
 
+.db-panel.coord h3 {
+  color: var(--color-accent);
+  margin: 0;
+}
+
+.coord-subhead {
+  margin: var(--space-3) 0 var(--space-1) !important;
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+}
+
+.coord-table {
+  min-width: 640px;
+}
+
+.status-chip {
+  display: inline-block;
+  padding: 3px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.status-chip.completed,
+.status-chip.commit_decided {
+  color: var(--color-ok);
+  border-color: rgba(22, 101, 52, 0.28);
+  background: rgba(22, 101, 52, 0.06);
+}
+
+.status-chip.abort_decided,
+.status-chip.aborted {
+  color: var(--color-destructive);
+  border-color: rgba(220, 38, 38, 0.28);
+  background: rgba(220, 38, 38, 0.06);
+}
+
+.status-chip.preparing,
+.status-chip.prepared,
+.status-chip.initiated,
+.status-chip.pending {
+  color: #92400e;
+  border-color: rgba(161, 98, 7, 0.28);
+  background: rgba(161, 98, 7, 0.08);
+}
+
+.vote-yes {
+  color: var(--color-ok);
+  font-weight: 600;
+}
+
+.vote-no {
+  color: var(--color-destructive);
+  font-weight: 600;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
