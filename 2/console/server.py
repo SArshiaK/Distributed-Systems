@@ -31,6 +31,18 @@ WATCH_ACCOUNTS = os.getenv(
 ).split(",")
 COMPOSE_PROJECT = os.getenv("COMPOSE_PROJECT_NAME", "2")
 DOCKER_SOCK = os.getenv("DOCKER_SOCK", "/var/run/docker.sock")
+PROJECT_NETWORK = os.getenv("COMPOSE_NETWORK", f"{COMPOSE_PROJECT}_default")
+
+# Lab controls: replicas + gateway/coordinator for failover / 2PC experiments.
+CONTROLLABLE_SERVICES = {
+    "bank-a1",
+    "bank-a2",
+    "bank-b1",
+    "bank-b2",
+    "gateway",
+    "coordinator",
+}
+PROTECTED_SERVICES = {"console"}
 
 STATIC = Path(__file__).parent / "static"
 app = FastAPI(title="Bank Architecture Lab")
@@ -42,6 +54,10 @@ class TxBody(BaseModel):
     account: str
     amount: Optional[Any] = None
     to_account: Optional[str] = Field(default=None)
+
+
+class ContainerActionBody(BaseModel):
+    action: str = Field(..., description="start | stop | isolate | rejoin")
 
 
 class UnixHTTPConnection(http.client.HTTPConnection):
@@ -56,19 +72,32 @@ class UnixHTTPConnection(http.client.HTTPConnection):
         self.sock = sock
 
 
-def docker_api(path: str, timeout: float = 5.0) -> Any:
+def docker_api(
+    path: str,
+    method: str = "GET",
+    payload: Optional[dict] = None,
+    timeout: float = 15.0,
+) -> Any:
     if not Path(DOCKER_SOCK).exists():
         raise FileNotFoundError(f"Docker socket not found: {DOCKER_SOCK}")
     conn = UnixHTTPConnection(DOCKER_SOCK, timeout=timeout)
     try:
-        conn.request("GET", path)
+        body = None
+        headers = {}
+        if payload is not None:
+            body = json.dumps(payload).encode("utf-8")
+            headers["Content-Type"] = "application/json"
+            headers["Content-Length"] = str(len(body))
+        conn.request(method, path, body=body, headers=headers)
         resp = conn.getresponse()
-        body = resp.read()
+        raw = resp.read()
         if resp.status >= 400:
-            raise RuntimeError(f"Docker API {resp.status}: {body.decode('utf-8', 'replace')}")
-        if not body:
+            raise RuntimeError(
+                f"Docker API {resp.status}: {raw.decode('utf-8', 'replace')}"
+            )
+        if not raw:
             return None
-        return json.loads(body.decode("utf-8"))
+        return json.loads(raw.decode("utf-8"))
     finally:
         conn.close()
 
@@ -155,6 +184,143 @@ def _state_kind(state: str, health: Optional[str]) -> str:
     return s or "unknown"
 
 
+def _inspect_container(container_ref: str) -> dict:
+    return docker_api(f"/containers/{container_ref}/json")
+
+
+def _assert_project_container(info: dict) -> str:
+    labels = info.get("Config", {}).get("Labels") or info.get("Labels") or {}
+    project = labels.get("com.docker.compose.project")
+    if project != COMPOSE_PROJECT:
+        raise PermissionError("container is not part of this compose project")
+    service = labels.get("com.docker.compose.service") or ""
+    if service in PROTECTED_SERVICES:
+        raise PermissionError(f"service '{service}' is protected from lab controls")
+    if service not in CONTROLLABLE_SERVICES:
+        raise PermissionError(f"service '{service}' is not controllable from the UI")
+    return service
+
+
+def _network_names(info: dict) -> set[str]:
+    networks = (info.get("NetworkSettings") or {}).get("Networks") or {}
+    return set(networks.keys())
+
+
+def _is_isolated(info: dict) -> bool:
+    nets = _network_names(info)
+    return PROJECT_NETWORK not in nets
+
+
+def apply_container_action(container_ref: str, action: str) -> dict[str, Any]:
+    action = (action or "").strip().lower()
+    if action not in {"start", "stop", "isolate", "rejoin"}:
+        raise ValueError("action must be start, stop, isolate, or rejoin")
+
+    info = _inspect_container(container_ref)
+    service = _assert_project_container(info)
+    full_id = info["Id"]
+    name = (info.get("Name") or "").lstrip("/")
+    state = ((info.get("State") or {}).get("Status") or "").lower()
+
+    if action == "stop":
+        if state != "running":
+            return {
+                "ok": True,
+                "action": action,
+                "service": service,
+                "name": name,
+                "message": f"{name} already stopped",
+            }
+        docker_api(f"/containers/{full_id}/stop?t=3", method="POST")
+        return {
+            "ok": True,
+            "action": action,
+            "service": service,
+            "name": name,
+            "message": f"stopped {name}",
+        }
+
+    if action == "start":
+        if state == "running":
+            # If previously isolated, keep current network state.
+            return {
+                "ok": True,
+                "action": action,
+                "service": service,
+                "name": name,
+                "message": f"{name} already running",
+                "isolated": _is_isolated(info),
+            }
+        docker_api(f"/containers/{full_id}/start", method="POST")
+        return {
+            "ok": True,
+            "action": action,
+            "service": service,
+            "name": name,
+            "message": f"started {name}",
+        }
+
+    if action == "isolate":
+        if state != "running":
+            raise RuntimeError("container must be running to isolate it")
+        if _is_isolated(info):
+            return {
+                "ok": True,
+                "action": action,
+                "service": service,
+                "name": name,
+                "message": f"{name} already isolated from {PROJECT_NETWORK}",
+                "isolated": True,
+            }
+        docker_api(
+            f"/networks/{PROJECT_NETWORK}/disconnect",
+            method="POST",
+            payload={"Container": full_id, "Force": True},
+        )
+        return {
+            "ok": True,
+            "action": action,
+            "service": service,
+            "name": name,
+            "message": f"disconnected {name} from {PROJECT_NETWORK}",
+            "isolated": True,
+        }
+
+    # rejoin — restore Compose DNS aliases so peers can resolve service names again.
+    if state != "running":
+        raise RuntimeError("container must be running to rejoin the network")
+    if not _is_isolated(info):
+        return {
+            "ok": True,
+            "action": action,
+            "service": service,
+            "name": name,
+            "message": f"{name} already on {PROJECT_NETWORK}",
+            "isolated": False,
+        }
+    aliases = []
+    for alias in (service, name, f"{COMPOSE_PROJECT}-{service}-1"):
+        if alias and alias not in aliases:
+            aliases.append(alias)
+    docker_api(
+        f"/networks/{PROJECT_NETWORK}/connect",
+        method="POST",
+        payload={
+            "Container": full_id,
+            "EndpointConfig": {"Aliases": aliases},
+        },
+    )
+    return {
+        "ok": True,
+        "action": action,
+        "service": service,
+        "name": name,
+        "message": f"reconnected {name} to {PROJECT_NETWORK}",
+        "isolated": False,
+        "aliases": aliases,
+    }
+
+
 def collect_docker_status() -> dict[str, Any]:
     project = COMPOSE_PROJECT
     filters = quote(json.dumps({"label": [f"com.docker.compose.project={project}"]}))
@@ -164,9 +330,9 @@ def collect_docker_status() -> dict[str, Any]:
     for c in containers_raw:
         labels = c.get("Labels") or {}
         names = [n.lstrip("/") for n in (c.get("Names") or [])]
+        service = labels.get("com.docker.compose.service")
         health = None
         status_text = c.get("Status") or ""
-        # Health is in State when inspecting; list endpoint puts it in Status string sometimes.
         state_obj = c.get("State")
         if isinstance(state_obj, dict):
             health = (state_obj.get("Health") or {}).get("Status")
@@ -180,16 +346,39 @@ def collect_docker_status() -> dict[str, Any]:
             elif "(health: starting)" in status_text:
                 health = "starting"
 
+        networks = list(
+            (((c.get("NetworkSettings") or {}).get("Networks")) or {}).keys()
+        )
+        # List endpoint may omit Networks; fall back to inspect for controllable ones.
+        isolated = False
+        if str(state) == "running" and service in CONTROLLABLE_SERVICES:
+            if PROJECT_NETWORK in networks:
+                isolated = False
+            elif networks:
+                isolated = True
+            else:
+                try:
+                    isolated = _is_isolated(_inspect_container(c["Id"]))
+                except Exception:
+                    isolated = False
+
+        kind = _state_kind(str(state), health)
+        if isolated and str(state) == "running":
+            kind = "isolated"
+
+        controllable = service in CONTROLLABLE_SERVICES
         containers.append(
             {
                 "id": (c.get("Id") or "")[:12],
-                "name": names[0] if names else labels.get("com.docker.compose.service", "?"),
-                "service": labels.get("com.docker.compose.service"),
+                "name": names[0] if names else service or "?",
+                "service": service,
                 "image": c.get("Image"),
                 "state": state,
                 "health": health,
                 "status": status_text,
-                "kind": _state_kind(str(state), health),
+                "kind": kind,
+                "isolated": isolated,
+                "controllable": controllable,
                 "ports": _fmt_ports(c.get("Ports")),
                 "created": c.get("Created"),
             }
@@ -212,7 +401,6 @@ def collect_docker_status() -> dict[str, Any]:
     volumes.sort(key=lambda x: x.get("name") or "")
 
     networks_raw = docker_api(f"/networks?filters={filters}") or []
-    # Also include the default project network by name pattern if label filter misses it.
     if not networks_raw:
         all_nets = docker_api("/networks") or []
         networks_raw = [
@@ -236,9 +424,10 @@ def collect_docker_status() -> dict[str, Any]:
 
     counts = {
         "total": len(containers),
-        "running": sum(1 for c in containers if c["state"] == "running"),
+        "running": sum(1 for c in containers if c["state"] == "running" and not c["isolated"]),
         "healthy": sum(1 for c in containers if c["kind"] == "healthy"),
         "unhealthy": sum(1 for c in containers if c["kind"] == "unhealthy"),
+        "isolated": sum(1 for c in containers if c.get("isolated")),
         "exited": sum(1 for c in containers if c["state"] == "exited"),
         "other": sum(
             1
@@ -250,6 +439,7 @@ def collect_docker_status() -> dict[str, Any]:
     return {
         "ok": True,
         "project": project,
+        "network": PROJECT_NETWORK,
         "counts": counts,
         "containers": containers,
         "volumes": volumes,
@@ -327,6 +517,124 @@ def docker_status():
         )
 
 
+@app.post("/api/docker/containers/{container_id}/action")
+def docker_container_action(container_id: str, body: ContainerActionBody):
+    try:
+        result = apply_container_action(container_id, body.action)
+        return result
+    except PermissionError as exc:
+        return JSONResponse(
+            status_code=403,
+            content={"ok": False, "error": str(exc)},
+        )
+    except ValueError as exc:
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "error": str(exc)},
+        )
+    except Exception as exc:
+        return JSONResponse(
+            status_code=500,
+            content={"ok": False, "error": str(exc)},
+        )
+
+
+def _enrich_flow_hints(body: TxBody, data: dict, *, gateway_unreachable: bool = False) -> dict:
+    """Attach animation hints: where the request actually got, and where it failed."""
+    action = (body.action or "").strip().lower()
+    msg = str(data.get("message") or "").lower()
+    status = str(data.get("status") or "").lower()
+    decision = str(data.get("decision") or "").upper()
+
+    ok = status == "success" or decision == "COMMIT"
+    pending = status in {"pending", "unknown"} or decision == "" and status == "pending"
+
+    fail_at = None
+    if gateway_unreachable or "gateway unreachable" in msg:
+        fail_at = "gateway"
+    elif "coordinator unreachable" in msg:
+        fail_at = "coordinator"
+    elif "no healthy replica" in msg:
+        fail_at = "gateway"
+    elif "upstream replica unreachable" in msg:
+        fail_at = "replica"
+    elif not ok and not pending and status in {"error", "vote_no"} and not (
+        data.get("replica_id") or data.get("gateway_replica") or data.get("mode")
+    ):
+        # Generic transport/routing failure before a concrete participant answered.
+        if "coordinator" in msg:
+            fail_at = "coordinator"
+        elif "replica" in msg or "shard" in msg:
+            fail_at = "replica"
+
+    reached = ["client"]
+    if fail_at != "gateway":
+        reached.append("gateway")
+    else:
+        reached.append("gateway")
+        data["_route"] = reached
+        data["_fail_at"] = "gateway"
+        data["_action"] = action
+        data["_ok"] = False
+        return data
+
+    is_cross = bool(
+        action == "transfer"
+        and body.to_account
+        and (
+            data.get("mode") == "cross_shard"
+            or decision in {"COMMIT", "ABORT"}
+            or fail_at == "coordinator"
+            or "cross" in msg
+        )
+    )
+
+    # Infer cross-shard intent even when coordinator never answered.
+    if (
+        not is_cross
+        and action == "transfer"
+        and body.to_account
+        and fail_at == "coordinator"
+    ):
+        is_cross = True
+
+    if is_cross or fail_at == "coordinator":
+        reached.append("coordinator")
+        if fail_at == "coordinator":
+            data["_route"] = reached
+            data["_fail_at"] = "coordinator"
+            data["_action"] = action
+            data["_ok"] = False
+            return data
+        if ok or decision == "ABORT" or pending or data.get("mode") == "cross_shard":
+            reached.extend(
+                ["replica_from", "db_from", "replica_to", "db_to", "db_coord"]
+            )
+    else:
+        if fail_at == "replica":
+            reached.append("replica")
+            data["_route"] = reached
+            data["_fail_at"] = "replica"
+            data["_action"] = action
+            data["_ok"] = False
+            return data
+        # Local path completed to a replica (success or business error).
+        if (
+            ok
+            or data.get("replica_id")
+            or data.get("gateway_replica")
+            or data.get("mode") == "same_shard"
+            or status in {"error", "aborted"}
+        ):
+            reached.extend(["replica", "db"])
+
+    data["_route"] = reached
+    data["_fail_at"] = fail_at
+    data["_action"] = action
+    data["_ok"] = ok
+    return data
+
+
 @app.post("/api/transaction")
 def transaction(body: TxBody):
     try:
@@ -339,28 +647,17 @@ def transaction(body: TxBody):
             data = r.json()
         except ValueError:
             data = {"status": "error", "message": r.text}
+        if not isinstance(data, dict):
+            data = {"status": "error", "message": str(data)}
+        data = _enrich_flow_hints(body, data)
+        return JSONResponse(status_code=r.status_code, content=data)
     except requests.RequestException as exc:
-        return JSONResponse(
-            status_code=503,
-            content={"status": "error", "message": f"gateway unreachable: {exc}"},
+        data = _enrich_flow_hints(
+            body,
+            {"status": "error", "message": f"gateway unreachable: {exc}"},
+            gateway_unreachable=True,
         )
-
-    # Enrich with animation route hints for the UI.
-    action = body.action.strip().lower()
-    route = ["client", "gateway"]
-    if action == "transfer" and body.to_account:
-        mode = data.get("mode")
-        if mode == "cross_shard" or data.get("decision"):
-            route = ["client", "gateway", "coordinator", "replica_from", "db_from", "replica_to", "db_to"]
-        else:
-            route = ["client", "gateway", "replica", "db"]
-    else:
-        route = ["client", "gateway", "replica", "db"]
-
-    if isinstance(data, dict):
-        data["_route"] = route
-        data["_action"] = action
-    return JSONResponse(status_code=r.status_code, content=data)
+        return JSONResponse(status_code=503, content=data)
 
 
 @app.get("/api/transactions/{tx_id}")

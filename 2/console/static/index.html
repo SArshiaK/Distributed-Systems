@@ -247,6 +247,12 @@
             <span class="muted-note" id="dockerUpdated">—</span>
           </div>
           <div class="table-scroll">
+            <p class="docker-hint">
+              Controllable services: bank replicas, gateway, coordinator.
+              <strong>Stop</strong> kills the container;
+              <strong>Isolate</strong> keeps it running but disconnects it from the compose network
+              (Gateway health checks will fail).
+            </p>
             <table class="docker-table">
               <thead>
                 <tr>
@@ -255,7 +261,7 @@
                   <th>State</th>
                   <th>Status</th>
                   <th>Ports</th>
-                  <th>Image</th>
+                  <th>Controls</th>
                 </tr>
               </thead>
               <tbody id="dockerContainers"></tbody>

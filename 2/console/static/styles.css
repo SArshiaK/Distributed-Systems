@@ -175,8 +175,74 @@ button {
   overflow: auto;
 }
 
+.docker-hint {
+  margin: 0 0 var(--space-2);
+  color: var(--color-muted-foreground);
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
 .docker-table {
-  min-width: 640px;
+  min-width: 760px;
+}
+
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.btn-tiny {
+  border: 1px solid var(--color-border);
+  background: #fff;
+  color: var(--color-foreground);
+  padding: 6px 10px;
+  min-height: 32px;
+  border-radius: var(--radius);
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+}
+
+.btn-tiny:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  background: var(--color-muted);
+}
+
+.btn-tiny.danger {
+  color: var(--color-destructive);
+  border-color: rgba(220, 38, 38, 0.28);
+}
+
+.btn-tiny.danger:hover:not(:disabled) {
+  background: rgba(220, 38, 38, 0.06);
+}
+
+.btn-tiny.warn {
+  color: #92400e;
+  border-color: rgba(161, 98, 7, 0.35);
+}
+
+.btn-tiny.warn:hover:not(:disabled) {
+  background: rgba(161, 98, 7, 0.08);
+}
+
+.btn-tiny:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.state-badge.isolated {
+  color: #92400e;
+  border-color: rgba(161, 98, 7, 0.28);
+  background: rgba(161, 98, 7, 0.08);
+}
+
+.state-badge.isolated::before {
+  background: var(--color-accent);
+}
+
+#dockerActionLive:not(.hidden) {
+  margin-top: var(--space-2);
 }
 
 .docker-grid .docker-table {
@@ -481,6 +547,13 @@ button:focus-visible {
 .node-card.down {
   stroke: var(--color-destructive);
   fill: #fff5f5;
+}
+
+.node-card.failed-hop {
+  stroke: var(--color-destructive);
+  stroke-width: 3;
+  fill: #fff5f5;
+  filter: drop-shadow(0 0 10px rgba(220, 38, 38, 0.35));
 }
 
 .node-label {

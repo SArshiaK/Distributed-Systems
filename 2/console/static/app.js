@@ -33,8 +33,8 @@
   }
 
   function clearActive() {
-    document.querySelectorAll(".node-card.active, .flow-path.lit").forEach((el) => {
-      el.classList.remove("active", "lit");
+    document.querySelectorAll(".node-card.active, .node-card.failed-hop, .flow-path.lit").forEach((el) => {
+      el.classList.remove("active", "failed-hop", "lit");
     });
   }
 
@@ -148,38 +148,7 @@
     return null;
   }
 
-  function buildHopPlan(payload, result) {
-    const action = payload.action;
-    const fromShard = shardOfAccount(payload.account);
-    const toShard = shardOfAccount(payload.to_account);
-    const hops = [{ node: "node-client", path: null }];
-
-    hops.push({ node: "node-gateway", path: "path-client-gw" });
-
-    if (action === "transfer" && fromShard && toShard && fromShard !== toShard) {
-      hops.push({ node: "node-coordinator", path: "path-gw-coord" });
-      hops.push({
-        node: replicaNodeId(fromShard === "A" ? "A1" : "B1"),
-        path: fromShard === "A" ? "path-coord-a" : "path-coord-b",
-      });
-      hops.push({
-        node: fromShard === "A" ? "node-db-a" : "node-db-b",
-        path: fromShard === "A" ? "path-a1-db" : "path-b1-db",
-      });
-      hops.push({
-        node: replicaNodeId(toShard === "A" ? "A1" : "B1"),
-        path: toShard === "A" ? "path-coord-a" : "path-coord-b",
-      });
-      hops.push({
-        node: toShard === "A" ? "node-db-a" : "node-db-b",
-        path: toShard === "A" ? "path-a1-db" : "path-b1-db",
-      });
-      hops.push({ node: "node-db-coord", path: null });
-      return hops;
-    }
-
-    const rid = result.replica_id || (fromShard === "B" ? "B1" : "A1");
-    const node = replicaNodeId(rid);
+  function replicaPathIds(rid) {
     const pathToRep =
       rid === "A1"
         ? "path-gw-a1"
@@ -188,27 +157,141 @@
           : rid === "B1"
             ? "path-gw-b1"
             : "path-gw-b2";
-    const pathToDb =
-      rid.startsWith("A")
-        ? rid === "A2"
-          ? "path-a2-db"
-          : "path-a1-db"
-        : rid === "B2"
-          ? "path-b2-db"
-          : "path-b1-db";
+    const pathToDb = rid.startsWith("A")
+      ? rid === "A2"
+        ? "path-a2-db"
+        : "path-a1-db"
+      : rid === "B2"
+        ? "path-b2-db"
+        : "path-b1-db";
     const db = rid.startsWith("A") ? "node-db-a" : "node-db-b";
-    hops.push({ node, path: pathToRep });
-    hops.push({ node: db, path: pathToDb });
+    return { pathToRep, pathToDb, db };
+  }
+
+  function replicaIdFromResult(result, fallbackShard) {
+    if (result.replica_id) return String(result.replica_id).toUpperCase();
+    const url = result.gateway_replica || result.replica || "";
+    const m = /bank-([ab][12])/i.exec(url);
+    if (m) return m[1].toUpperCase();
+    return fallbackShard === "B" ? "B1" : "A1";
+  }
+
+  function markFailed(hops, nodeId) {
+    const hop = hops.find((h) => h.node === nodeId) || hops[hops.length - 1];
+    if (hop) hop.failed = true;
+    return hops;
+  }
+
+  function buildHopPlan(payload, result) {
+    const action = payload.action;
+    const fromShard = shardOfAccount(payload.account);
+    const toShard = shardOfAccount(payload.to_account);
+    const route = Array.isArray(result._route) ? result._route : null;
+    const failAt = result._fail_at || null;
+    const hops = [{ node: "node-client", path: null }];
+
+    const wantsCross =
+      action === "transfer" &&
+      fromShard &&
+      toShard &&
+      fromShard !== toShard;
+
+    // Prefer server-provided reachability so animation never invents hops past a break.
+    if (route) {
+      if (route.includes("gateway")) {
+        hops.push({
+          node: "node-gateway",
+          path: "path-client-gw",
+          failed: failAt === "gateway",
+        });
+      }
+      if (failAt === "gateway") return hops;
+
+      if (route.includes("coordinator") || failAt === "coordinator") {
+        hops.push({
+          node: "node-coordinator",
+          path: "path-gw-coord",
+          failed: failAt === "coordinator",
+        });
+      }
+      if (failAt === "coordinator") return hops;
+
+      if (route.includes("replica") || failAt === "replica") {
+        const rid = replicaIdFromResult(result, fromShard);
+        const { pathToRep } = replicaPathIds(rid);
+        hops.push({
+          node: replicaNodeId(rid),
+          path: pathToRep,
+          failed: failAt === "replica",
+        });
+        if (failAt === "replica") return hops;
+      }
+
+      if (route.includes("db") && !route.includes("replica_from")) {
+        const rid = replicaIdFromResult(result, fromShard);
+        const { pathToDb, db } = replicaPathIds(rid);
+        hops.push({ node: db, path: pathToDb });
+      }
+
+      if (route.includes("replica_from")) {
+        hops.push({
+          node: replicaNodeId(fromShard === "A" ? "A1" : "B1"),
+          path: fromShard === "A" ? "path-coord-a" : "path-coord-b",
+        });
+      }
+      if (route.includes("db_from")) {
+        hops.push({
+          node: fromShard === "A" ? "node-db-a" : "node-db-b",
+          path: fromShard === "A" ? "path-a1-db" : "path-b1-db",
+        });
+      }
+      if (route.includes("replica_to")) {
+        hops.push({
+          node: replicaNodeId(toShard === "A" ? "A1" : "B1"),
+          path: toShard === "A" ? "path-coord-a" : "path-coord-b",
+        });
+      }
+      if (route.includes("db_to")) {
+        hops.push({
+          node: toShard === "A" ? "node-db-a" : "node-db-b",
+          path: toShard === "A" ? "path-a1-db" : "path-b1-db",
+        });
+      }
+      if (route.includes("db_coord")) {
+        hops.push({ node: "node-db-coord", path: null });
+      }
+      return hops;
+    }
+
+    // Fallback if older response without hints.
+    hops.push({ node: "node-gateway", path: "path-client-gw" });
+    const msg = String(result.message || "").toLowerCase();
+    if (msg.includes("gateway unreachable")) {
+      return markFailed(hops, "node-gateway");
+    }
+    if (wantsCross) {
+      hops.push({ node: "node-coordinator", path: "path-gw-coord" });
+      if (msg.includes("coordinator unreachable")) {
+        return markFailed(hops, "node-coordinator");
+      }
+    }
     return hops;
   }
 
   async function animateHops(hops) {
     clearActive();
+    document.querySelectorAll(".node-card.failed-hop").forEach((el) => {
+      el.classList.remove("failed-hop");
+    });
     const packet = $("#packet");
     if (reduced.matches || !window.gsap) {
       hops.forEach((h) => {
         activate([h.node]);
         if (h.path) lit([h.path]);
+        if (h.failed) {
+          const card = nodeRect(h.node);
+          if (card) card.classList.add("failed-hop");
+        }
       });
       gsap.set(packet, { opacity: 0 });
       return;
@@ -241,10 +324,32 @@
           });
         }
       }
-      tl.to(nodeRect(hop.node), { scale: 1.03, transformOrigin: "50% 50%", duration: 0.12, yoyo: true, repeat: 1 }, "<");
+      const card = nodeRect(hop.node);
+      if (card) {
+        if (hop.failed) {
+          tl.add(() => card.classList.add("failed-hop"));
+          tl.to(card, {
+            scale: 1.05,
+            transformOrigin: "50% 50%",
+            duration: 0.16,
+            yoyo: true,
+            repeat: 3,
+          }, "<");
+        } else {
+          tl.to(
+            card,
+            { scale: 1.03, transformOrigin: "50% 50%", duration: 0.12, yoyo: true, repeat: 1 },
+            "<"
+          );
+        }
+      }
     }
-    tl.to(packet, { opacity: 0, duration: 0.2 });
+    tl.to(packet, { opacity: hopFailedOpacity(hops), duration: 0.25 });
     await tl.then();
+  }
+
+  function hopFailedOpacity(hops) {
+    return hops.some((h) => h.failed) ? 0.15 : 0;
   }
 
   async function sendRequest(payload) {
@@ -258,20 +363,41 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        data = { status: "error", message: `bad response (${res.status})`, _fail_at: "gateway", _route: ["client", "gateway"] };
+      }
+      if (!data._route) {
+        // Network-level failure before JSON hints (should be rare with console proxy).
+        if (!res.ok && /gateway unreachable/i.test(data.message || "")) {
+          data._fail_at = "gateway";
+          data._route = ["client", "gateway"];
+        }
+      }
+
       const hops = buildHopPlan(payload, data);
       await animateHops(hops);
 
-      const ok = data.status === "success" || data.decision === "COMMIT";
+      const ok = data._ok === true || data.status === "success" || data.decision === "COMMIT";
+      const failLabel = data._fail_at ? `stopped at ${data._fail_at}` : null;
       const summary = ok
         ? `Success · ${payload.action} · replica ${data.replica_id || data.mode || "n/a"}`
-        : `Result · ${data.status || res.status} · ${data.message || data.decision || ""}`;
+        : `Blocked · ${failLabel || data.status || res.status} · ${data.message || data.decision || ""}`;
       setLive(summary);
       logEvent(summary + (data.transaction_id ? ` · tx ${data.transaction_id.slice(0, 8)}` : ""));
       await refreshSnapshot();
     } catch (err) {
-      setLive(`Error · ${err.message}`);
-      logEvent(`Error · ${err.message}`);
+      const hops = buildHopPlan(payload, {
+        status: "error",
+        message: `gateway unreachable: ${err.message}`,
+        _fail_at: "gateway",
+        _route: ["client", "gateway"],
+      });
+      await animateHops(hops);
+      setLive(`Blocked · stopped at gateway · ${err.message}`);
+      logEvent(`Blocked · gateway · ${err.message}`);
     } finally {
       sendBtn.disabled = false;
     }
@@ -283,6 +409,72 @@
       .replaceAll("<", "&lt;")
       .replaceAll(">", "&gt;")
       .replaceAll('"', "&quot;");
+  }
+
+  function controlButtons(item) {
+    if (!item.controllable) {
+      return `<span class="muted-note">—</span>`;
+    }
+    const running = item.state === "running";
+    const isolated = !!item.isolated;
+    const id = escapeHtml(item.id);
+    const name = escapeHtml(item.name || item.service || id);
+
+    if (!running) {
+      return `<div class="action-row">
+        <button class="btn-tiny" type="button" data-docker-action="start" data-id="${id}" data-name="${name}">Start</button>
+      </div>`;
+    }
+
+    return `<div class="action-row">
+      <button class="btn-tiny danger" type="button" data-docker-action="stop" data-id="${id}" data-name="${name}">Stop</button>
+      ${
+        isolated
+          ? `<button class="btn-tiny" type="button" data-docker-action="rejoin" data-id="${id}" data-name="${name}">Rejoin</button>`
+          : `<button class="btn-tiny warn" type="button" data-docker-action="isolate" data-id="${id}" data-name="${name}">Isolate</button>`
+      }
+    </div>`;
+  }
+
+  function setDockerActionLive(msg, isError = false) {
+    let el = $("#dockerActionLive");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "dockerActionLive";
+      el.className = "live";
+      el.setAttribute("role", "status");
+      $("#panel-docker .docker-panel")?.appendChild(el);
+    }
+    el.classList.remove("hidden");
+    el.textContent = msg;
+    el.style.color = isError ? "var(--color-destructive)" : "";
+  }
+
+  async function runDockerAction(containerId, action, name) {
+    setDockerActionLive(`Working · ${action} ${name}…`);
+    document
+      .querySelectorAll("[data-docker-action]")
+      .forEach((btn) => (btn.disabled = true));
+    try {
+      const res = await fetch(`/api/docker/containers/${encodeURIComponent(containerId)}/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.ok === false) {
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      setDockerActionLive(data.message || `${action} ok · ${name}`);
+      await refreshDocker();
+    } catch (err) {
+      setDockerActionLive(`Failed · ${action} ${name} · ${err.message}`, true);
+      await refreshDocker().catch(() => {});
+    } finally {
+      document
+        .querySelectorAll("[data-docker-action]")
+        .forEach((btn) => (btn.disabled = false));
+    }
   }
 
   function renderDocker(data) {
@@ -302,7 +494,7 @@
 
     err.classList.add("hidden");
     err.textContent = "";
-    sub.textContent = `Project “${data.project}” · containers, volumes, and networks from Docker Compose.`;
+    sub.textContent = `Project “${data.project}” · network ${data.network || "—"} · live compose resources.`;
     updated.textContent = `Updated ${new Date().toLocaleTimeString()}`;
 
     const c = data.counts || {};
@@ -310,8 +502,8 @@
       <span class="pill"><span class="dot" aria-hidden="true"></span>Total ${c.total ?? 0}</span>
       <span class="pill ok"><span class="dot" aria-hidden="true"></span>Running ${c.running ?? 0}</span>
       <span class="pill ok"><span class="dot" aria-hidden="true"></span>Healthy ${c.healthy ?? 0}</span>
-      <span class="pill ${c.unhealthy ? "bad" : ""}"><span class="dot" aria-hidden="true"></span>Unhealthy ${
-        c.unhealthy ?? 0
+      <span class="pill ${c.isolated ? "bad" : ""}"><span class="dot" aria-hidden="true"></span>Isolated ${
+        c.isolated ?? 0
       }</span>
       <span class="pill ${c.exited ? "bad" : ""}"><span class="dot" aria-hidden="true"></span>Exited ${
         c.exited ?? 0
@@ -326,13 +518,14 @@
         .map((item) => {
           const kind = item.kind || item.state || "unknown";
           const ports = (item.ports || []).join(", ") || "—";
+          const statusExtra = item.isolated ? `${item.status || ""} · network isolated` : item.status || "—";
           return `<tr>
             <td><strong>${escapeHtml(item.service || "—")}</strong></td>
             <td class="mono">${escapeHtml(item.name)}</td>
             <td><span class="state-badge ${escapeHtml(kind)}">${escapeHtml(kind)}</span></td>
-            <td>${escapeHtml(item.status || "—")}</td>
+            <td>${escapeHtml(statusExtra)}</td>
             <td class="mono">${escapeHtml(ports)}</td>
-            <td class="mono">${escapeHtml(item.image || "—")}</td>
+            <td>${controlButtons(item)}</td>
           </tr>`;
         })
         .join("");
@@ -439,6 +632,16 @@
     refreshSnapshot().then(() => setLive("Snapshot refreshed."))
   );
   $("#dockerRefreshBtn").addEventListener("click", () => refreshDocker());
+
+  $("#dockerContainers").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-docker-action]");
+    if (!btn) return;
+    const action = btn.getAttribute("data-docker-action");
+    const id = btn.getAttribute("data-id");
+    const name = btn.getAttribute("data-name") || id;
+    if (!action || !id) return;
+    runDockerAction(id, action, name);
+  });
 
   document.querySelectorAll("[data-preset]").forEach((btn) => {
     btn.addEventListener("click", () => {
