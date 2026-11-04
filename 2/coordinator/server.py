@@ -32,6 +32,7 @@ HOST = os.getenv("HOST", "0.0.0.0")
 PORT = int(os.getenv("PORT", "8090"))
 UPSTREAM_TIMEOUT = float(os.getenv("UPSTREAM_TIMEOUT", "5"))
 RECOVERY_INTERVAL = float(os.getenv("RECOVERY_INTERVAL", "3"))
+FAULT_DIR = Path(os.getenv("FAULT_DIR", "/faults"))
 
 ACCOUNT_RE = re.compile(r"^A(\d{4})$", re.IGNORECASE)
 TERMINAL = {"COMPLETED"}
@@ -226,6 +227,18 @@ def call_participant(shard_id: str, path: str, payload: dict) -> dict:
     return data
 
 
+def _fault_pause_after_commit_decided(tx_id: str) -> None:
+    """Lab hook for experiment 6: hold after durable COMMIT before participant acks."""
+    flag = FAULT_DIR / "pause_after_commit_decided"
+    if not flag.exists():
+        return
+    logger.info(f"fault_pause_after_commit_decided  tx={tx_id}  waiting_for_flag_clear")
+    deadline = time.time() + 60
+    while flag.exists() and time.time() < deadline:
+        time.sleep(0.2)
+    logger.info(f"fault_pause_after_commit_decided  tx={tx_id}  resumed")
+
+
 def run_prepare(tx: dict) -> bool:
     tx_id = tx["transaction_id"]
     set_status(tx_id, "PREPARING")
@@ -258,6 +271,7 @@ def run_prepare(tx: dict) -> bool:
         set_status(tx_id, "PREPARED")
         # Decision must be durable BEFORE sending COMMIT.
         set_status(tx_id, "COMMIT_DECIDED")
+        _fault_pause_after_commit_decided(tx_id)
         return True
     set_status(tx_id, "ABORT_DECIDED")
     return False

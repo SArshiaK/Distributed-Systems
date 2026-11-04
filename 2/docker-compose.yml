@@ -109,8 +109,10 @@ services:
     environment:
       DATABASE_URL: postgresql://bank:bank@db-coord:5432/coord
       SHARD_MAP_PATH: /config/shard_map.json
+      FAULT_DIR: /faults
     volumes:
       - ./config/shard_map.json:/config/shard_map.json:ro
+      - ./experiments/faults:/faults
     ports:
       - "8090:8090"
     depends_on:
