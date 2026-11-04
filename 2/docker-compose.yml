@@ -148,8 +148,12 @@ services:
       DB_A_URL: postgresql://bank:bank@db-a:5432/bank
       DB_B_URL: postgresql://bank:bank@db-b:5432/bank
       DB_COORD_URL: postgresql://bank:bank@db-coord:5432/coord
+      COMPOSE_PROJECT_NAME: "2"
+      DOCKER_SOCK: /var/run/docker.sock
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     ports:
-      - "3000:3000"
+      - "3030:3000"
     depends_on:
       gateway:
         condition: service_started

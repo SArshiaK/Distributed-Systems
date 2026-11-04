@@ -15,178 +15,288 @@
           Watch every hop: Client → Gateway → Replicas → Databases, and cross-shard
           2PC through the Coordinator. Live balances update as requests complete.
         </p>
-        <div class="status-row" id="statusRow" aria-live="polite"></div>
+        <nav class="tabs" role="tablist" aria-label="Console views">
+          <button
+            class="tab active"
+            type="button"
+            role="tab"
+            id="tab-lab"
+            aria-selected="true"
+            aria-controls="panel-lab"
+            data-tab="lab"
+          >
+            Architecture Lab
+          </button>
+          <button
+            class="tab"
+            type="button"
+            role="tab"
+            id="tab-docker"
+            aria-selected="false"
+            aria-controls="panel-docker"
+            data-tab="docker"
+          >
+            Docker Status
+          </button>
+        </nav>
       </header>
 
-      <div class="layout">
-        <aside class="panel" aria-label="Request console">
-          <h2>Send Request</h2>
-          <form id="txForm" class="form-grid">
-            <label>
-              Action
-              <select id="action" name="action">
-                <option value="balance">balance</option>
-                <option value="deposit">deposit</option>
-                <option value="withdraw">withdraw</option>
-                <option value="transfer">transfer</option>
-              </select>
-            </label>
-            <label>
-              Account
-              <input id="account" name="account" value="A0500" autocomplete="off" />
-            </label>
-            <label id="toWrap" class="hidden">
-              To account
-              <input id="to_account" name="to_account" value="A1500" autocomplete="off" />
-            </label>
-            <label id="amountWrap" class="hidden">
-              Amount
-              <input id="amount" name="amount" type="number" min="0.01" step="0.01" value="25" />
-            </label>
-            <div class="btn-row">
-              <button class="btn btn-primary" type="submit" id="sendBtn">Send</button>
-              <button class="btn btn-ghost" type="button" id="refreshBtn">Refresh data</button>
+      <section
+        id="panel-lab"
+        class="tab-panel"
+        role="tabpanel"
+        aria-labelledby="tab-lab"
+      >
+        <div class="status-row" id="statusRow" aria-live="polite"></div>
+
+        <div class="layout">
+          <aside class="panel" aria-label="Request console">
+            <h2>Send Request</h2>
+            <form id="txForm" class="form-grid">
+              <label>
+                Action
+                <select id="action" name="action">
+                  <option value="balance">balance</option>
+                  <option value="deposit">deposit</option>
+                  <option value="withdraw">withdraw</option>
+                  <option value="transfer">transfer</option>
+                </select>
+              </label>
+              <label>
+                Account
+                <input id="account" name="account" value="A0500" autocomplete="off" />
+              </label>
+              <label id="toWrap" class="hidden">
+                To account
+                <input id="to_account" name="to_account" value="A1500" autocomplete="off" />
+              </label>
+              <label id="amountWrap" class="hidden">
+                Amount
+                <input id="amount" name="amount" type="number" min="0.01" step="0.01" value="25" />
+              </label>
+              <div class="btn-row">
+                <button class="btn btn-primary" type="submit" id="sendBtn">Send</button>
+                <button class="btn btn-ghost" type="button" id="refreshBtn">Refresh data</button>
+              </div>
+            </form>
+            <div class="btn-row" style="margin-top: 16px">
+              <button class="btn btn-accent" type="button" data-preset="local">
+                Demo same-shard
+              </button>
+              <button class="btn btn-ghost" type="button" data-preset="cross">
+                Demo cross-shard
+              </button>
             </div>
-          </form>
-          <div class="btn-row" style="margin-top: 16px">
-            <button class="btn btn-accent" type="button" data-preset="local">
-              Demo same-shard
-            </button>
-            <button class="btn btn-ghost" type="button" data-preset="cross">
-              Demo cross-shard
-            </button>
+            <div class="live" id="liveStatus" role="status" aria-atomic="true">
+              Ready. Send a request to animate the flow.
+            </div>
+            <h2 style="margin-top: 28px">Event log</h2>
+            <ul class="log-list" id="eventLog"></ul>
+          </aside>
+
+          <section class="stage-wrap">
+            <div class="stage panel" style="padding: 0; box-shadow: none">
+              <svg
+                class="arch-svg"
+                id="arch"
+                viewBox="0 0 980 560"
+                role="img"
+                aria-label="Distributed banking architecture diagram"
+              >
+                <defs>
+                  <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                    <path d="M0,0 L6,3 L0,6 Z" fill="#A16207"></path>
+                  </marker>
+                </defs>
+
+                <!-- guides -->
+                <path id="path-client-gw" class="flow-path" d="M160,80 C220,80 250,80 310,80" />
+                <path id="path-gw-coord" class="flow-path" d="M470,80 C520,80 560,80 620,80" />
+                <path id="path-gw-a1" class="flow-path" d="M390,120 C390,170 250,180 220,220" />
+                <path id="path-gw-a2" class="flow-path" d="M410,120 C430,170 330,190 320,220" />
+                <path id="path-gw-b1" class="flow-path" d="M430,120 C480,170 560,190 580,220" />
+                <path id="path-gw-b2" class="flow-path" d="M450,120 C520,170 650,190 680,220" />
+                <path id="path-coord-a" class="flow-path" d="M700,120 C700,160 300,160 270,220" />
+                <path id="path-coord-b" class="flow-path" d="M740,120 C760,160 650,180 630,220" />
+                <path id="path-a1-db" class="flow-path" d="M220,280 C220,330 200,350 200,380" />
+                <path id="path-a2-db" class="flow-path" d="M320,280 C300,330 220,350 210,380" />
+                <path id="path-b1-db" class="flow-path" d="M580,280 C580,330 700,350 720,380" />
+                <path id="path-b2-db" class="flow-path" d="M680,280 C700,330 740,350 740,380" />
+
+                <!-- nodes -->
+                <g id="node-client" data-node="client">
+                  <rect class="node-card" x="60" y="40" width="100" height="80" rx="2" />
+                  <text class="node-label" x="110" y="75" text-anchor="middle">Client</text>
+                  <text class="node-sub" x="110" y="95" text-anchor="middle">UI console</text>
+                </g>
+
+                <g id="node-gateway" data-node="gateway">
+                  <rect class="node-card" x="310" y="40" width="160" height="80" rx="2" />
+                  <text class="node-label" x="390" y="72" text-anchor="middle">Gateway</text>
+                  <text class="node-sub" x="390" y="92" text-anchor="middle">shard + RR :8080</text>
+                </g>
+
+                <g id="node-coordinator" data-node="coordinator">
+                  <rect class="node-card" x="620" y="40" width="160" height="80" rx="2" />
+                  <text class="node-label" x="700" y="72" text-anchor="middle">Coordinator</text>
+                  <text class="node-sub" x="700" y="92" text-anchor="middle">2PC :8090</text>
+                </g>
+
+                <g id="node-a1" data-node="A1">
+                  <rect class="node-card" x="170" y="220" width="100" height="60" rx="2" />
+                  <text class="node-label" x="220" y="248" text-anchor="middle">A1</text>
+                  <text class="node-sub" x="220" y="266" text-anchor="middle">:8001</text>
+                </g>
+                <g id="node-a2" data-node="A2">
+                  <rect class="node-card" x="270" y="220" width="100" height="60" rx="2" />
+                  <text class="node-label" x="320" y="248" text-anchor="middle">A2</text>
+                  <text class="node-sub" x="320" y="266" text-anchor="middle">:8002</text>
+                </g>
+                <g id="node-b1" data-node="B1">
+                  <rect class="node-card" x="530" y="220" width="100" height="60" rx="2" />
+                  <text class="node-label" x="580" y="248" text-anchor="middle">B1</text>
+                  <text class="node-sub" x="580" y="266" text-anchor="middle">:8003</text>
+                </g>
+                <g id="node-b2" data-node="B2">
+                  <rect class="node-card" x="630" y="220" width="100" height="60" rx="2" />
+                  <text class="node-label" x="680" y="248" text-anchor="middle">B2</text>
+                  <text class="node-sub" x="680" y="266" text-anchor="middle">:8004</text>
+                </g>
+
+                <g id="node-db-a" data-node="db-a">
+                  <rect class="node-card" x="140" y="380" width="140" height="80" rx="2" />
+                  <text class="node-label" x="210" y="415" text-anchor="middle">Database A</text>
+                  <text class="node-sub" x="210" y="435" text-anchor="middle">A0001–A1000</text>
+                </g>
+                <g id="node-db-b" data-node="db-b">
+                  <rect class="node-card" x="660" y="380" width="140" height="80" rx="2" />
+                  <text class="node-label" x="730" y="415" text-anchor="middle">Database B</text>
+                  <text class="node-sub" x="730" y="435" text-anchor="middle">A1001–A2000</text>
+                </g>
+                <g id="node-db-coord" data-node="db-coord">
+                  <rect class="node-card" x="400" y="460" width="160" height="60" rx="2" />
+                  <text class="node-label" x="480" y="488" text-anchor="middle">Coord DB</text>
+                  <text class="node-sub" x="480" y="506" text-anchor="middle">durable 2PC state</text>
+                </g>
+
+                <circle id="packet" class="packet" r="8" cx="0" cy="0"></circle>
+              </svg>
+            </div>
+
+            <div class="db-grid">
+              <div class="panel db-panel a">
+                <h3>Database A · live</h3>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Account</th>
+                      <th>Balance</th>
+                      <th>Δ</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tableA"></tbody>
+                </table>
+              </div>
+              <div class="panel db-panel b">
+                <h3>Database B · live</h3>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Account</th>
+                      <th>Balance</th>
+                      <th>Δ</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tableB"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="panel">
+              <h2>Recent 2PC transactions</h2>
+              <div class="tx-list" id="txList"></div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section
+        id="panel-docker"
+        class="tab-panel hidden"
+        role="tabpanel"
+        aria-labelledby="tab-docker"
+        hidden
+      >
+        <div class="docker-toolbar">
+          <div>
+            <h2 class="docker-title">Compose project resources</h2>
+            <p class="docker-sub" id="dockerSub">
+              Live view of containers, volumes, and networks for this stack.
+            </p>
           </div>
-          <div class="live" id="liveStatus" role="status" aria-atomic="true">
-            Ready. Send a request to animate the flow.
+          <div class="btn-row">
+            <button class="btn btn-ghost" type="button" id="dockerRefreshBtn">Refresh</button>
           </div>
-          <h2 style="margin-top: 28px">Event log</h2>
-          <ul class="log-list" id="eventLog"></ul>
-        </aside>
+        </div>
 
-        <section class="stage-wrap">
-          <div class="stage panel" style="padding: 0; box-shadow: none">
-            <svg
-              class="arch-svg"
-              id="arch"
-              viewBox="0 0 980 560"
-              role="img"
-              aria-label="Distributed banking architecture diagram"
-            >
-              <defs>
-                <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-                  <path d="M0,0 L6,3 L0,6 Z" fill="#A16207"></path>
-                </marker>
-              </defs>
+        <div class="status-row" id="dockerCounts" aria-live="polite"></div>
 
-              <!-- guides -->
-              <path id="path-client-gw" class="flow-path" d="M160,80 C220,80 250,80 310,80" />
-              <path id="path-gw-coord" class="flow-path" d="M470,80 C520,80 560,80 620,80" />
-              <path id="path-gw-a1" class="flow-path" d="M390,120 C390,170 250,180 220,220" />
-              <path id="path-gw-a2" class="flow-path" d="M410,120 C430,170 330,190 320,220" />
-              <path id="path-gw-b1" class="flow-path" d="M430,120 C480,170 560,190 580,220" />
-              <path id="path-gw-b2" class="flow-path" d="M450,120 C520,170 650,190 680,220" />
-              <path id="path-coord-a" class="flow-path" d="M700,120 C700,160 300,160 270,220" />
-              <path id="path-coord-b" class="flow-path" d="M740,120 C760,160 650,180 630,220" />
-              <path id="path-a1-db" class="flow-path" d="M220,280 C220,330 200,350 200,380" />
-              <path id="path-a2-db" class="flow-path" d="M320,280 C300,330 220,350 210,380" />
-              <path id="path-b1-db" class="flow-path" d="M580,280 C580,330 700,350 720,380" />
-              <path id="path-b2-db" class="flow-path" d="M680,280 C700,330 740,350 740,380" />
-
-              <!-- nodes -->
-              <g id="node-client" data-node="client">
-                <rect class="node-card" x="60" y="40" width="100" height="80" rx="2" />
-                <text class="node-label" x="110" y="75" text-anchor="middle">Client</text>
-                <text class="node-sub" x="110" y="95" text-anchor="middle">UI console</text>
-              </g>
-
-              <g id="node-gateway" data-node="gateway">
-                <rect class="node-card" x="310" y="40" width="160" height="80" rx="2" />
-                <text class="node-label" x="390" y="72" text-anchor="middle">Gateway</text>
-                <text class="node-sub" x="390" y="92" text-anchor="middle">shard + RR :8080</text>
-              </g>
-
-              <g id="node-coordinator" data-node="coordinator">
-                <rect class="node-card" x="620" y="40" width="160" height="80" rx="2" />
-                <text class="node-label" x="700" y="72" text-anchor="middle">Coordinator</text>
-                <text class="node-sub" x="700" y="92" text-anchor="middle">2PC :8090</text>
-              </g>
-
-              <g id="node-a1" data-node="A1">
-                <rect class="node-card" x="170" y="220" width="100" height="60" rx="2" />
-                <text class="node-label" x="220" y="248" text-anchor="middle">A1</text>
-                <text class="node-sub" x="220" y="266" text-anchor="middle">:8001</text>
-              </g>
-              <g id="node-a2" data-node="A2">
-                <rect class="node-card" x="270" y="220" width="100" height="60" rx="2" />
-                <text class="node-label" x="320" y="248" text-anchor="middle">A2</text>
-                <text class="node-sub" x="320" y="266" text-anchor="middle">:8002</text>
-              </g>
-              <g id="node-b1" data-node="B1">
-                <rect class="node-card" x="530" y="220" width="100" height="60" rx="2" />
-                <text class="node-label" x="580" y="248" text-anchor="middle">B1</text>
-                <text class="node-sub" x="580" y="266" text-anchor="middle">:8003</text>
-              </g>
-              <g id="node-b2" data-node="B2">
-                <rect class="node-card" x="630" y="220" width="100" height="60" rx="2" />
-                <text class="node-label" x="680" y="248" text-anchor="middle">B2</text>
-                <text class="node-sub" x="680" y="266" text-anchor="middle">:8004</text>
-              </g>
-
-              <g id="node-db-a" data-node="db-a">
-                <rect class="node-card" x="140" y="380" width="140" height="80" rx="2" />
-                <text class="node-label" x="210" y="415" text-anchor="middle">Database A</text>
-                <text class="node-sub" x="210" y="435" text-anchor="middle">A0001–A1000</text>
-              </g>
-              <g id="node-db-b" data-node="db-b">
-                <rect class="node-card" x="660" y="380" width="140" height="80" rx="2" />
-                <text class="node-label" x="730" y="415" text-anchor="middle">Database B</text>
-                <text class="node-sub" x="730" y="435" text-anchor="middle">A1001–A2000</text>
-              </g>
-              <g id="node-db-coord" data-node="db-coord">
-                <rect class="node-card" x="400" y="460" width="160" height="60" rx="2" />
-                <text class="node-label" x="480" y="488" text-anchor="middle">Coord DB</text>
-                <text class="node-sub" x="480" y="506" text-anchor="middle">durable 2PC state</text>
-              </g>
-
-              <circle id="packet" class="packet" r="8" cx="0" cy="0"></circle>
-            </svg>
+        <div class="panel docker-panel">
+          <div class="docker-panel-head">
+            <h2>Containers</h2>
+            <span class="muted-note" id="dockerUpdated">—</span>
           </div>
+          <div class="table-scroll">
+            <table class="docker-table">
+              <thead>
+                <tr>
+                  <th>Service</th>
+                  <th>Container</th>
+                  <th>State</th>
+                  <th>Status</th>
+                  <th>Ports</th>
+                  <th>Image</th>
+                </tr>
+              </thead>
+              <tbody id="dockerContainers"></tbody>
+            </table>
+          </div>
+        </div>
 
-          <div class="db-grid">
-            <div class="panel db-panel a">
-              <h3>Database A · live</h3>
-              <table>
+        <div class="docker-grid">
+          <div class="panel docker-panel">
+            <h2>Volumes</h2>
+            <div class="table-scroll">
+              <table class="docker-table">
                 <thead>
                   <tr>
-                    <th>Account</th>
-                    <th>Balance</th>
-                    <th>Δ</th>
+                    <th>Name</th>
+                    <th>Driver</th>
                   </tr>
                 </thead>
-                <tbody id="tableA"></tbody>
+                <tbody id="dockerVolumes"></tbody>
               </table>
             </div>
-            <div class="panel db-panel b">
-              <h3>Database B · live</h3>
-              <table>
+          </div>
+          <div class="panel docker-panel">
+            <h2>Networks</h2>
+            <div class="table-scroll">
+              <table class="docker-table">
                 <thead>
                   <tr>
-                    <th>Account</th>
-                    <th>Balance</th>
-                    <th>Δ</th>
+                    <th>Name</th>
+                    <th>Driver</th>
+                    <th>Scope</th>
                   </tr>
                 </thead>
-                <tbody id="tableB"></tbody>
+                <tbody id="dockerNetworks"></tbody>
               </table>
             </div>
           </div>
+        </div>
 
-          <div class="panel">
-            <h2>Recent 2PC transactions</h2>
-            <div class="tx-list" id="txList"></div>
-          </div>
-        </section>
-      </div>
+        <div class="live hidden" id="dockerError" role="alert"></div>
+      </section>
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>

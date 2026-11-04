@@ -84,6 +84,171 @@ button {
   padding-bottom: var(--space-3);
 }
 
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+}
+
+.tab {
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-muted-foreground);
+  padding: 10px 16px;
+  min-height: 40px;
+  border-radius: var(--radius);
+  letter-spacing: 0.04em;
+  transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
+}
+
+.tab:hover {
+  color: var(--color-foreground);
+  border-color: var(--color-secondary);
+}
+
+.tab.active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.tab-panel {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.tab-panel > .status-row {
+  margin-bottom: 0;
+}
+
+.docker-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.docker-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  letter-spacing: 0.02em;
+}
+
+.docker-sub {
+  margin: 6px 0 0;
+  color: var(--color-muted-foreground);
+  font-size: 0.92rem;
+}
+
+.docker-panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.docker-panel-head h2 {
+  margin: 0;
+}
+
+.muted-note {
+  font-size: 0.78rem;
+  color: var(--color-muted-foreground);
+}
+
+.docker-grid {
+  display: grid;
+  gap: var(--space-2);
+}
+
+@media (min-width: 900px) {
+  .docker-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.table-scroll {
+  overflow: auto;
+}
+
+.docker-table {
+  min-width: 640px;
+}
+
+.docker-grid .docker-table {
+  min-width: 280px;
+}
+
+.state-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.state-badge::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-muted-foreground);
+}
+
+.state-badge.healthy,
+.state-badge.running {
+  color: var(--color-ok);
+  border-color: rgba(22, 101, 52, 0.25);
+  background: rgba(22, 101, 52, 0.06);
+}
+
+.state-badge.healthy::before,
+.state-badge.running::before {
+  background: var(--color-ok);
+}
+
+.state-badge.unhealthy,
+.state-badge.exited,
+.state-badge.dead {
+  color: var(--color-destructive);
+  border-color: rgba(220, 38, 38, 0.25);
+  background: rgba(220, 38, 38, 0.06);
+}
+
+.state-badge.unhealthy::before,
+.state-badge.exited::before,
+.state-badge.dead::before {
+  background: var(--color-destructive);
+}
+
+.state-badge.starting,
+.state-badge.restarting,
+.state-badge.created,
+.state-badge.paused {
+  color: #92400e;
+  border-color: rgba(161, 98, 7, 0.28);
+  background: rgba(161, 98, 7, 0.08);
+}
+
+.state-badge.starting::before,
+.state-badge.restarting::before,
+.state-badge.created::before,
+.state-badge.paused::before {
+  background: var(--color-accent);
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.84rem;
+}
+
 .hero-kicker {
   margin: 0;
   letter-spacing: 0.24em;

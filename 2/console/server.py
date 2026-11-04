@@ -1,10 +1,14 @@
-"""Architecture lab console: live DB snapshot + gateway proxy."""
+"""Architecture lab console: live DB snapshot + gateway proxy + Docker status."""
 
 from __future__ import annotations
 
+import http.client
+import json
 import os
+import socket
 from pathlib import Path
 from typing import Any, Optional
+from urllib.parse import quote
 
 import psycopg
 import requests
@@ -25,6 +29,8 @@ WATCH_ACCOUNTS = os.getenv(
     "WATCH_ACCOUNTS",
     "A0100,A0200,A0500,A0600,A1000,A1001,A1500,A1600,A2000",
 ).split(",")
+COMPOSE_PROJECT = os.getenv("COMPOSE_PROJECT_NAME", "2")
+DOCKER_SOCK = os.getenv("DOCKER_SOCK", "/var/run/docker.sock")
 
 STATIC = Path(__file__).parent / "static"
 app = FastAPI(title="Bank Architecture Lab")
@@ -36,6 +42,35 @@ class TxBody(BaseModel):
     account: str
     amount: Optional[Any] = None
     to_account: Optional[str] = Field(default=None)
+
+
+class UnixHTTPConnection(http.client.HTTPConnection):
+    def __init__(self, sock_path: str, timeout: float = 5.0) -> None:
+        super().__init__("localhost", timeout=timeout)
+        self.sock_path = sock_path
+
+    def connect(self) -> None:
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.settimeout(self.timeout)
+        sock.connect(self.sock_path)
+        self.sock = sock
+
+
+def docker_api(path: str, timeout: float = 5.0) -> Any:
+    if not Path(DOCKER_SOCK).exists():
+        raise FileNotFoundError(f"Docker socket not found: {DOCKER_SOCK}")
+    conn = UnixHTTPConnection(DOCKER_SOCK, timeout=timeout)
+    try:
+        conn.request("GET", path)
+        resp = conn.getresponse()
+        body = resp.read()
+        if resp.status >= 400:
+            raise RuntimeError(f"Docker API {resp.status}: {body.decode('utf-8', 'replace')}")
+        if not body:
+            return None
+        return json.loads(body.decode("utf-8"))
+    finally:
+        conn.close()
 
 
 def fetch_accounts(url: str, shard: str) -> list[dict]:
@@ -79,6 +114,147 @@ def fetch_coord_recent(limit: int = 8) -> list[dict]:
         return out
     except Exception:
         return []
+
+
+def _fmt_ports(ports: Optional[list[dict]]) -> list[str]:
+    if not ports:
+        return []
+    out: list[str] = []
+    for p in ports:
+        public = p.get("PublicPort")
+        private = p.get("PrivatePort")
+        proto = p.get("Type", "tcp")
+        if public:
+            ip = p.get("IP") or "0.0.0.0"
+            out.append(f"{ip}:{public}->{private}/{proto}")
+        elif private:
+            out.append(f"{private}/{proto}")
+    # de-dupe while preserving order
+    seen = set()
+    unique = []
+    for item in out:
+        if item not in seen:
+            seen.add(item)
+            unique.append(item)
+    return unique
+
+
+def _state_kind(state: str, health: Optional[str]) -> str:
+    s = (state or "").lower()
+    h = (health or "").lower()
+    if s == "running" and h == "healthy":
+        return "healthy"
+    if s == "running" and h == "unhealthy":
+        return "unhealthy"
+    if s == "running" and h == "starting":
+        return "starting"
+    if s == "running":
+        return "running"
+    if s in {"exited", "dead", "created", "paused", "restarting", "removing"}:
+        return s
+    return s or "unknown"
+
+
+def collect_docker_status() -> dict[str, Any]:
+    project = COMPOSE_PROJECT
+    filters = quote(json.dumps({"label": [f"com.docker.compose.project={project}"]}))
+
+    containers_raw = docker_api(f"/containers/json?all=1&filters={filters}") or []
+    containers = []
+    for c in containers_raw:
+        labels = c.get("Labels") or {}
+        names = [n.lstrip("/") for n in (c.get("Names") or [])]
+        health = None
+        status_text = c.get("Status") or ""
+        # Health is in State when inspecting; list endpoint puts it in Status string sometimes.
+        state_obj = c.get("State")
+        if isinstance(state_obj, dict):
+            health = (state_obj.get("Health") or {}).get("Status")
+            state = state_obj.get("Status") or c.get("State")
+        else:
+            state = state_obj or "unknown"
+            if "(healthy)" in status_text:
+                health = "healthy"
+            elif "(unhealthy)" in status_text:
+                health = "unhealthy"
+            elif "(health: starting)" in status_text:
+                health = "starting"
+
+        containers.append(
+            {
+                "id": (c.get("Id") or "")[:12],
+                "name": names[0] if names else labels.get("com.docker.compose.service", "?"),
+                "service": labels.get("com.docker.compose.service"),
+                "image": c.get("Image"),
+                "state": state,
+                "health": health,
+                "status": status_text,
+                "kind": _state_kind(str(state), health),
+                "ports": _fmt_ports(c.get("Ports")),
+                "created": c.get("Created"),
+            }
+        )
+
+    containers.sort(key=lambda x: (x.get("service") or x["name"]))
+
+    volumes_raw = docker_api(f"/volumes?filters={filters}") or {}
+    volumes = []
+    for v in volumes_raw.get("Volumes") or []:
+        labels = v.get("Labels") or {}
+        volumes.append(
+            {
+                "name": v.get("Name"),
+                "driver": v.get("Driver"),
+                "mountpoint": v.get("Mountpoint"),
+                "service": labels.get("com.docker.compose.volume"),
+            }
+        )
+    volumes.sort(key=lambda x: x.get("name") or "")
+
+    networks_raw = docker_api(f"/networks?filters={filters}") or []
+    # Also include the default project network by name pattern if label filter misses it.
+    if not networks_raw:
+        all_nets = docker_api("/networks") or []
+        networks_raw = [
+            n
+            for n in all_nets
+            if (n.get("Labels") or {}).get("com.docker.compose.project") == project
+            or (n.get("Name") or "").startswith(f"{project}_")
+        ]
+
+    networks = []
+    for n in networks_raw:
+        networks.append(
+            {
+                "id": (n.get("Id") or "")[:12],
+                "name": n.get("Name"),
+                "driver": n.get("Driver"),
+                "scope": n.get("Scope"),
+            }
+        )
+    networks.sort(key=lambda x: x.get("name") or "")
+
+    counts = {
+        "total": len(containers),
+        "running": sum(1 for c in containers if c["state"] == "running"),
+        "healthy": sum(1 for c in containers if c["kind"] == "healthy"),
+        "unhealthy": sum(1 for c in containers if c["kind"] == "unhealthy"),
+        "exited": sum(1 for c in containers if c["state"] == "exited"),
+        "other": sum(
+            1
+            for c in containers
+            if c["state"] not in {"running", "exited"}
+        ),
+    }
+
+    return {
+        "ok": True,
+        "project": project,
+        "counts": counts,
+        "containers": containers,
+        "volumes": volumes,
+        "networks": networks,
+    }
 
 
 @app.get("/")
@@ -129,6 +305,26 @@ def snapshot():
         },
         "recent_2pc": fetch_coord_recent(),
     }
+
+
+@app.get("/api/docker")
+def docker_status():
+    try:
+        return collect_docker_status()
+    except Exception as exc:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "ok": False,
+                "project": COMPOSE_PROJECT,
+                "error": str(exc),
+                "hint": "Mount /var/run/docker.sock into the console container.",
+                "counts": {},
+                "containers": [],
+                "volumes": [],
+                "networks": [],
+            },
+        )
 
 
 @app.post("/api/transaction")

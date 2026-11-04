@@ -1,4 +1,4 @@
-/* Bank Architecture Lab — request flow visualizer */
+/* Bank Architecture Lab — request flow visualizer + Docker status */
 (() => {
   const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
   const $ = (sel) => document.querySelector(sel);
@@ -9,6 +9,8 @@
   const sendBtn = $("#sendBtn");
   const balances = { A: new Map(), B: new Map() };
   let pollTimer;
+  let dockerPollTimer;
+  let activeTab = "lab";
 
   if (window.gsap && window.MotionPathPlugin) {
     gsap.registerPlugin(MotionPathPlugin);
@@ -150,7 +152,6 @@
     const action = payload.action;
     const fromShard = shardOfAccount(payload.account);
     const toShard = shardOfAccount(payload.to_account);
-    const replica = result.replica_id || result.gateway_replica;
     const hops = [{ node: "node-client", path: null }];
 
     hops.push({ node: "node-gateway", path: "path-client-gw" });
@@ -276,6 +277,151 @@
     }
   }
 
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;");
+  }
+
+  function renderDocker(data) {
+    const err = $("#dockerError");
+    const sub = $("#dockerSub");
+    const counts = $("#dockerCounts");
+    const updated = $("#dockerUpdated");
+
+    if (!data?.ok) {
+      err.classList.remove("hidden");
+      err.textContent = `Docker status unavailable · ${data?.error || "unknown error"}${
+        data?.hint ? ` · ${data.hint}` : ""
+      }`;
+      counts.innerHTML = "";
+      return;
+    }
+
+    err.classList.add("hidden");
+    err.textContent = "";
+    sub.textContent = `Project “${data.project}” · containers, volumes, and networks from Docker Compose.`;
+    updated.textContent = `Updated ${new Date().toLocaleTimeString()}`;
+
+    const c = data.counts || {};
+    counts.innerHTML = `
+      <span class="pill"><span class="dot" aria-hidden="true"></span>Total ${c.total ?? 0}</span>
+      <span class="pill ok"><span class="dot" aria-hidden="true"></span>Running ${c.running ?? 0}</span>
+      <span class="pill ok"><span class="dot" aria-hidden="true"></span>Healthy ${c.healthy ?? 0}</span>
+      <span class="pill ${c.unhealthy ? "bad" : ""}"><span class="dot" aria-hidden="true"></span>Unhealthy ${
+        c.unhealthy ?? 0
+      }</span>
+      <span class="pill ${c.exited ? "bad" : ""}"><span class="dot" aria-hidden="true"></span>Exited ${
+        c.exited ?? 0
+      }</span>
+    `;
+
+    const tbody = $("#dockerContainers");
+    if (!data.containers?.length) {
+      tbody.innerHTML = `<tr><td colspan="6">No containers found for this project.</td></tr>`;
+    } else {
+      tbody.innerHTML = data.containers
+        .map((item) => {
+          const kind = item.kind || item.state || "unknown";
+          const ports = (item.ports || []).join(", ") || "—";
+          return `<tr>
+            <td><strong>${escapeHtml(item.service || "—")}</strong></td>
+            <td class="mono">${escapeHtml(item.name)}</td>
+            <td><span class="state-badge ${escapeHtml(kind)}">${escapeHtml(kind)}</span></td>
+            <td>${escapeHtml(item.status || "—")}</td>
+            <td class="mono">${escapeHtml(ports)}</td>
+            <td class="mono">${escapeHtml(item.image || "—")}</td>
+          </tr>`;
+        })
+        .join("");
+    }
+
+    const volBody = $("#dockerVolumes");
+    if (!data.volumes?.length) {
+      volBody.innerHTML = `<tr><td colspan="2">No volumes.</td></tr>`;
+    } else {
+      volBody.innerHTML = data.volumes
+        .map(
+          (v) => `<tr>
+            <td class="mono">${escapeHtml(v.name)}</td>
+            <td>${escapeHtml(v.driver || "—")}</td>
+          </tr>`
+        )
+        .join("");
+    }
+
+    const netBody = $("#dockerNetworks");
+    if (!data.networks?.length) {
+      netBody.innerHTML = `<tr><td colspan="3">No networks.</td></tr>`;
+    } else {
+      netBody.innerHTML = data.networks
+        .map(
+          (n) => `<tr>
+            <td class="mono">${escapeHtml(n.name)}</td>
+            <td>${escapeHtml(n.driver || "—")}</td>
+            <td>${escapeHtml(n.scope || "—")}</td>
+          </tr>`
+        )
+        .join("");
+    }
+  }
+
+  async function refreshDocker() {
+    const res = await fetch("/api/docker");
+    const data = await res.json();
+    renderDocker(data);
+    return data;
+  }
+
+  function startLabPolling() {
+    clearInterval(pollTimer);
+    pollTimer = setInterval(() => {
+      if (!document.hidden && activeTab === "lab") {
+        refreshSnapshot().catch(() => {});
+      }
+    }, 2500);
+  }
+
+  function startDockerPolling() {
+    clearInterval(dockerPollTimer);
+    dockerPollTimer = setInterval(() => {
+      if (!document.hidden && activeTab === "docker") {
+        refreshDocker().catch(() => {});
+      }
+    }, 3000);
+  }
+
+  function setTab(name) {
+    activeTab = name;
+    document.querySelectorAll(".tab").forEach((btn) => {
+      const on = btn.dataset.tab === name;
+      btn.classList.toggle("active", on);
+      btn.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    document.querySelectorAll(".tab-panel").forEach((panel) => {
+      const on = panel.id === `panel-${name}`;
+      panel.classList.toggle("hidden", !on);
+      if (on) panel.removeAttribute("hidden");
+      else panel.setAttribute("hidden", "");
+    });
+
+    if (name === "lab") {
+      refreshSnapshot().catch(() => {});
+      startLabPolling();
+      clearInterval(dockerPollTimer);
+    } else {
+      refreshDocker().catch(() => {});
+      startDockerPolling();
+      clearInterval(pollTimer);
+    }
+  }
+
+  document.querySelectorAll(".tab").forEach((btn) => {
+    btn.addEventListener("click", () => setTab(btn.dataset.tab));
+  });
+
   $("#txForm").addEventListener("submit", (e) => {
     e.preventDefault();
     const action = actionEl.value;
@@ -289,7 +435,10 @@
   });
 
   actionEl.addEventListener("change", toggleFields);
-  $("#refreshBtn").addEventListener("click", () => refreshSnapshot().then(() => setLive("Snapshot refreshed.")));
+  $("#refreshBtn").addEventListener("click", () =>
+    refreshSnapshot().then(() => setLive("Snapshot refreshed."))
+  );
+  $("#dockerRefreshBtn").addEventListener("click", () => refreshDocker());
 
   document.querySelectorAll("[data-preset]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -309,20 +458,19 @@
     });
   });
 
-  function startPolling() {
-    clearInterval(pollTimer);
-    pollTimer = setInterval(() => {
-      if (!document.hidden) refreshSnapshot().catch(() => {});
-    }, 2500);
-  }
-
   toggleFields();
   refreshSnapshot()
     .then(() => setLive("Live. Components healthy — send a request."))
     .catch((err) => setLive(`Snapshot failed: ${err.message}`));
-  startPolling();
+  startLabPolling();
   document.addEventListener("visibilitychange", () => {
-    if (document.hidden) clearInterval(pollTimer);
-    else startPolling();
+    if (document.hidden) {
+      clearInterval(pollTimer);
+      clearInterval(dockerPollTimer);
+    } else if (activeTab === "lab") {
+      startLabPolling();
+    } else {
+      startDockerPolling();
+    }
   });
 })();
