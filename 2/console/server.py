@@ -18,6 +18,8 @@ from fastapi.staticfiles import StaticFiles
 from psycopg.rows import dict_row
 from pydantic import BaseModel, Field
 
+import lab_experiments
+
 HOST = os.getenv("HOST", "0.0.0.0")
 PORT = int(os.getenv("PORT", "3000"))
 GATEWAY_URL = os.getenv("GATEWAY_URL", "http://gateway:8080")
@@ -27,11 +29,13 @@ DB_B_URL = os.getenv("DB_B_URL", "postgresql://bank:bank@db-b:5432/bank")
 DB_COORD_URL = os.getenv("DB_COORD_URL", "postgresql://bank:bank@db-coord:5432/coord")
 WATCH_ACCOUNTS = os.getenv(
     "WATCH_ACCOUNTS",
-    "A0100,A0200,A0500,A0600,A1000,A1001,A1500,A1600,A2000",
+    "A0100,A0110,A0120,A0200,A0300,A0500,A0600,A0820,A1000,"
+    "A1001,A1500,A1510,A1520,A1600,A1820,A2000",
 ).split(",")
 COMPOSE_PROJECT = os.getenv("COMPOSE_PROJECT_NAME", "2")
 DOCKER_SOCK = os.getenv("DOCKER_SOCK", "/var/run/docker.sock")
 PROJECT_NETWORK = os.getenv("COMPOSE_NETWORK", f"{COMPOSE_PROJECT}_default")
+FAULT_DIR = os.getenv("FAULT_DIR", "/faults")
 
 # Lab controls: replicas + gateway/coordinator for failover / 2PC experiments.
 CONTROLLABLE_SERVICES = {
@@ -58,6 +62,10 @@ class TxBody(BaseModel):
 
 class ContainerActionBody(BaseModel):
     action: str = Field(..., description="start | stop | isolate | rejoin")
+
+
+class LabRunBody(BaseModel):
+    experiment: int = Field(..., description="3 | 6 | 7")
 
 
 class UnixHTTPConnection(http.client.HTTPConnection):
@@ -100,6 +108,18 @@ def docker_api(
         return json.loads(raw.decode("utf-8"))
     finally:
         conn.close()
+
+
+lab_experiments.configure(
+    gateway_url=GATEWAY_URL,
+    coordinator_url=COORDINATOR_URL,
+    db_a_url=DB_A_URL,
+    db_b_url=DB_B_URL,
+    db_coord_url=DB_COORD_URL,
+    fault_dir=FAULT_DIR,
+    compose_project=COMPOSE_PROJECT,
+    docker_api=docker_api,
+)
 
 
 def fetch_accounts(url: str, shard: str) -> list[dict]:
@@ -730,6 +750,19 @@ def tx_status(tx_id: str):
             status_code=503,
             content={"status": "error", "message": str(exc)},
         )
+
+
+@app.get("/api/lab/status")
+def lab_status():
+    return lab_experiments.get_status()
+
+
+@app.post("/api/lab/run")
+def lab_run(body: LabRunBody):
+    result = lab_experiments.start(body.experiment)
+    if not result.get("ok"):
+        return JSONResponse(status_code=409, content=result)
+    return result
 
 
 if __name__ == "__main__":

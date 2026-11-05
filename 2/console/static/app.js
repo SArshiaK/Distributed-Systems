@@ -12,7 +12,11 @@
   const coordPartPrev = new Map(); // tx|shard -> vote|ack
   let pollTimer;
   let dockerPollTimer;
+  let labPollTimer;
   let activeTab = "lab";
+  let labStepCount = 0;
+  let labReqCount = 0;
+  let labPhaseSig = "";
 
   if (window.gsap && window.MotionPathPlugin) {
     gsap.registerPlugin(MotionPathPlugin);
@@ -785,6 +789,388 @@
     }, 3000);
   }
 
+  function startExperimentsPolling(fast = false) {
+    clearInterval(labPollTimer);
+    labPollTimer = setInterval(() => {
+      if (!document.hidden && activeTab === "experiments") {
+        refreshLabStatus().catch(() => {});
+      }
+    }, fast ? 350 : 2000);
+  }
+
+  function setLabButtonsDisabled(disabled) {
+    document.querySelectorAll("[data-lab-run]").forEach((btn) => {
+      btn.disabled = disabled;
+    });
+  }
+
+  function badgeClass(passed, running, isCurrent) {
+    if (running && isCurrent) return "preparing";
+    if (passed === true && isCurrent) return "completed";
+    if (passed === false && isCurrent) return "aborted";
+    return "";
+  }
+
+  function badgeText(passed, running, isCurrent) {
+    if (running && isCurrent) return "live";
+    if (passed === true && isCurrent) return "PROVEN";
+    if (passed === false && isCurrent) return "FAILED";
+    return "idle";
+  }
+
+  function renderLabPhases(phases) {
+    const el = $("#labPhases");
+    if (!el) return;
+    const sig = JSON.stringify(phases || []);
+    if (sig === labPhaseSig) return;
+    labPhaseSig = sig;
+    if (!phases?.length) {
+      el.innerHTML = `<li class="muted-note">Phases appear when a demo starts.</li>`;
+      return;
+    }
+    el.innerHTML = phases
+      .map((p) => {
+        const st = escapeHtml(p.status || "");
+        return `<li class="${st}">
+          <span class="phase-label">${escapeHtml(p.label || p.key)}</span>
+          ${
+            p.detail
+              ? `<span class="phase-detail">${escapeHtml(p.detail)}</span>`
+              : ""
+          }
+        </li>`;
+      })
+      .join("");
+  }
+
+  function renderLabProof(data) {
+    const el = $("#labProof");
+    if (!el) return;
+    const proof = data.proof || {};
+    const passed = data.passed;
+    const exp = data.experiment;
+    const boxes = [];
+
+    if (exp === 3 || proof.account) {
+      boxes.push(`<div class="proof-box ${
+        proof.after != null && proof.after === proof.expected ? "ok" : ""
+      }">
+        <strong>Balance proof · ${escapeHtml(proof.account || "—")}</strong>
+        <div class="mono">before: ${proof.before ?? "—"}</div>
+        <div class="mono">formula: ${escapeHtml(proof.formula || "—")}</div>
+        <div class="mono">after: ${proof.after ?? "waiting…"}</div>
+        <div class="mono">expected: ${proof.expected ?? "—"}</div>
+      </div>`);
+      const hits = data.metrics?.replica_hits || {};
+      boxes.push(`<div class="proof-box">
+        <strong>Replica traffic (live)</strong>
+        <div class="mono">A1 handled: ${hits.A1 ?? 0}</div>
+        <div class="mono">A2 handled: ${hits.A2 ?? 0}</div>
+        <div class="mono">done: ${data.metrics?.done ?? 0} / ${data.metrics?.total ?? 0}</div>
+      </div>`);
+    }
+
+    if (exp === 6 || proof.from_account) {
+      const before = proof.before || {};
+      const after = proof.after || {};
+      boxes.push(`<div class="proof-box ${
+        proof.final_status === "COMPLETED" ? "ok" : ""
+      }">
+        <strong>2PC crash recovery</strong>
+        <div class="mono">${escapeHtml(proof.from_account || "")} → ${escapeHtml(
+          proof.to_account || ""
+        )} · ${proof.amount ?? ""}</div>
+        <div class="mono">tx: ${escapeHtml((proof.tx_id || "—").toString().slice(0, 8))}</div>
+        <div class="mono">after kill: ${escapeHtml(proof.status_after_kill || "—")}</div>
+        <div class="mono">final: ${escapeHtml(proof.final_status || "—")}</div>
+      </div>`);
+      boxes.push(`<div class="proof-box ${
+        after[proof.from_account] != null ? "ok" : ""
+      }">
+        <strong>Money movement</strong>
+        <div class="mono">${escapeHtml(proof.from_account || "src")}: ${
+          before[proof.from_account] ?? "—"
+        } → ${after[proof.from_account] ?? "…"}</div>
+        <div class="mono">${escapeHtml(proof.to_account || "dst")}: ${
+          before[proof.to_account] ?? "—"
+        } → ${after[proof.to_account] ?? "…"}</div>
+      </div>`);
+    }
+
+    if (exp === 7 || proof.money_before != null) {
+      const conserved =
+        proof.money_after != null && proof.money_before === proof.money_after;
+      boxes.push(`<div class="proof-box ${conserved ? "ok" : ""}">
+        <strong>Conservation of money</strong>
+        <div class="mono">before: ${proof.money_before ?? "—"}</div>
+        <div class="mono">after: ${proof.money_after ?? "waiting…"}</div>
+        <div class="mono">jobs: ${proof.jobs ?? data.metrics?.total ?? "—"}</div>
+        <div class="mono">COMMIT ${data.metrics?.success ?? proof.successes ?? 0} · ABORT ${
+          data.metrics?.abort ?? proof.aborts ?? 0
+        }</div>
+      </div>`);
+      const sb = proof.sample_before || {};
+      const sa = proof.sample_after || {};
+      const keys = Object.keys(sb);
+      if (keys.length) {
+        boxes.push(`<div class="proof-box">
+          <strong>Sample account balances</strong>
+          ${keys
+            .map(
+              (k) =>
+                `<div class="mono">${escapeHtml(k)}: ${sb[k]} → ${
+                  sa[k] ?? "…"
+                }</div>`
+            )
+            .join("")}
+        </div>`);
+      }
+    }
+
+    if (!boxes.length) {
+      el.innerHTML = `<p class="muted-note">Before / after values and formulas show up here.</p>`;
+      return;
+    }
+
+    if (passed === true) {
+      boxes.unshift(`<div class="proof-box ok"><strong>Verdict</strong><div class="mono">Demonstrated on the live Docker stack — requirements satisfied.</div></div>`);
+    } else if (passed === false) {
+      boxes.unshift(`<div class="proof-box bad"><strong>Verdict</strong><div class="mono">${escapeHtml(
+        data.error || "failed"
+      )}</div></div>`);
+    }
+
+    el.innerHTML = boxes.join("");
+  }
+
+  function renderLabRequests(requests) {
+    const tbody = $("#labReqTable");
+    const meta = $("#labReqMeta");
+    if (!tbody) return;
+    const rows = requests || [];
+    if (meta) meta.textContent = `${rows.length} request${rows.length === 1 ? "" : "s"}`;
+    if (!rows.length) {
+      tbody.innerHTML = `<tr><td colspan="8">No requests yet. Start a demo.</td></tr>`;
+      labReqCount = 0;
+      return;
+    }
+    const newest = rows.slice().reverse().slice(0, 80);
+    const grew = rows.length > labReqCount;
+    labReqCount = rows.length;
+    tbody.innerHTML = newest
+      .map((r, idx) => {
+        const accounts = r.to_account
+          ? `${r.account} → ${r.to_account}`
+          : r.account || "—";
+        let resultCls = "pending-cell";
+        let resultText = "…";
+        if (r.ok === true) {
+          resultCls = "ok-cell";
+          resultText = "OK";
+        } else if (r.ok === false) {
+          resultCls = "fail-cell";
+          resultText = "FAIL";
+        } else if (r.detail && /COMMIT|ABORT|PENDING/i.test(r.detail)) {
+          resultText = String(r.detail).split("·")[0].trim();
+          resultCls = /COMMIT/i.test(resultText)
+            ? "ok-cell"
+            : /ABORT|FAIL/i.test(resultText)
+              ? "fail-cell"
+              : "pending-cell";
+        }
+        return `<tr class="${grew && idx < 3 ? "fresh" : ""}">
+          <td class="mono">${r.seq ?? ""}</td>
+          <td>${escapeHtml(r.kind || "—")}</td>
+          <td>${escapeHtml(accounts)}</td>
+          <td>${r.amount != null ? Number(r.amount).toFixed(2) : "—"}</td>
+          <td class="mono">${escapeHtml(r.replica || "—")}</td>
+          <td class="${resultCls}">${escapeHtml(resultText)}</td>
+          <td class="mono">${r.ms != null ? r.ms : "—"}</td>
+          <td>${escapeHtml(r.detail || "")}</td>
+        </tr>`;
+      })
+      .join("");
+  }
+
+  function renderLabMetrics(metrics, running, passed) {
+    const el = $("#labMetrics");
+    if (!el) return;
+    const m = metrics || {};
+    const pills = [];
+    if (m.total != null) {
+      pills.push(
+        `<span class="pill"><span class="dot" aria-hidden="true"></span>Progress ${m.done ?? 0}/${m.total}</span>`
+      );
+    }
+    if (m.replica_hits) {
+      pills.push(
+        `<span class="pill ok"><span class="dot" aria-hidden="true"></span>A1 ${m.replica_hits.A1 ?? 0}</span>`
+      );
+      pills.push(
+        `<span class="pill ok"><span class="dot" aria-hidden="true"></span>A2 ${m.replica_hits.A2 ?? 0}</span>`
+      );
+    }
+    if (m.success != null || m.abort != null) {
+      pills.push(
+        `<span class="pill ok"><span class="dot" aria-hidden="true"></span>COMMIT ${m.success ?? 0}</span>`
+      );
+      pills.push(
+        `<span class="pill ${m.abort ? "bad" : ""}"><span class="dot" aria-hidden="true"></span>ABORT ${m.abort ?? 0}</span>`
+      );
+    }
+    if (m.tx_status) {
+      pills.push(
+        `<span class="pill"><span class="dot" aria-hidden="true"></span>Tx ${escapeHtml(
+          String(m.tx_status)
+        )}</span>`
+      );
+    }
+    if (m.coordinator) {
+      pills.push(
+        `<span class="pill ${m.coordinator === "killed" ? "bad" : "ok"}"><span class="dot" aria-hidden="true"></span>Coordinator ${escapeHtml(
+          String(m.coordinator)
+        )}</span>`
+      );
+    }
+    if (m.money_before != null) {
+      pills.push(
+        `<span class="pill"><span class="dot" aria-hidden="true"></span>Money ${m.money_before}${
+          m.money_after != null ? ` → ${m.money_after}` : ""
+        }</span>`
+      );
+    }
+    if (!pills.length) {
+      el.innerHTML = running
+        ? `<span class="pill"><span class="dot" aria-hidden="true"></span>Collecting live metrics…</span>`
+        : "";
+      return;
+    }
+    el.innerHTML = pills.join("");
+  }
+
+  function renderLabStatus(data) {
+    const row = $("#labRunStatus");
+    const meta = $("#labLogMeta");
+    const list = $("#labStepLog");
+    const headline = $("#labHeadline");
+    const title = $("#labHeadlineTitle");
+    if (!row || !list) return;
+
+    const running = !!data.running;
+    const exp = data.experiment;
+    const passed = data.passed;
+
+    if (title) {
+      title.textContent = exp
+        ? `Experiment ${exp} · ${data.title || "demo"}`
+        : "Demo stage";
+    }
+    if (headline) {
+      headline.textContent = data.headline || "Pick an experiment to demonstrate.";
+      headline.classList.remove("pass", "fail", "run");
+      if (running) headline.classList.add("run");
+      else if (passed === true) headline.classList.add("pass");
+      else if (passed === false) headline.classList.add("fail");
+    }
+
+    row.innerHTML = `
+      <span class="pill ${running ? "" : passed === true ? "ok" : passed === false ? "bad" : ""}">
+        <span class="dot" aria-hidden="true"></span>
+        ${
+          running
+            ? `LIVE DEMO · experiment ${exp}`
+            : passed === true
+              ? `PROVEN on live stack · exp ${exp}`
+              : passed === false
+                ? `FAILED · exp ${exp}`
+                : "Ready for presentation"
+        }
+      </span>
+    `;
+
+    [3, 6, 7].forEach((id) => {
+      const badge = document.getElementById(`labBadge${id}`);
+      const card = document.querySelector(`.exp-card[data-exp="${id}"]`);
+      const current = exp === id;
+      if (badge) {
+        badge.className = `status-chip ${badgeClass(passed, running, current)}`;
+        badge.textContent = badgeText(passed, running, current);
+      }
+      if (card) card.classList.toggle("active-run", running && current);
+    });
+
+    setLabButtonsDisabled(running);
+    renderLabMetrics(data.metrics, running, passed);
+    renderLabPhases(data.phases);
+    renderLabProof(data);
+    renderLabRequests(data.requests);
+
+    const steps = data.steps || [];
+    if (steps.length !== labStepCount) {
+      labStepCount = steps.length;
+      list.innerHTML = steps
+        .slice()
+        .reverse()
+        .map((s) => {
+          const cls = s.level === "pass" ? "pass" : s.level === "fail" ? "fail" : "";
+          const ts = s.t ? new Date(s.t * 1000).toLocaleTimeString() : "";
+          return `<li class="${cls}">${escapeHtml(ts)} · ${escapeHtml(s.message)}</li>`;
+        })
+        .join("");
+    }
+
+    if (meta) {
+      meta.textContent = running
+        ? `Recording live · poll 350ms`
+        : exp
+          ? `Finished · leave this screen visible for review`
+          : "Idle";
+    }
+  }
+
+  async function refreshLabStatus() {
+    const res = await fetch("/api/lab/status");
+    const data = await res.json();
+    renderLabStatus(data);
+    if (data.running) startExperimentsPolling(true);
+    else if (activeTab === "experiments") startExperimentsPolling(false);
+    return data;
+  }
+
+  async function runLabExperiment(id) {
+    setLabButtonsDisabled(true);
+    labStepCount = 0;
+    labReqCount = 0;
+    labPhaseSig = "";
+    const list = $("#labStepLog");
+    if (list) list.innerHTML = "";
+    const reqBody = $("#labReqTable");
+    if (reqBody) reqBody.innerHTML = `<tr><td colspan="8">Starting live demo…</td></tr>`;
+    const proof = $("#labProof");
+    if (proof) proof.innerHTML = `<p class="muted-note">Capturing baseline…</p>`;
+    const phases = $("#labPhases");
+    if (phases) phases.innerHTML = `<li class="active"><span class="phase-label">Starting…</span></li>`;
+    try {
+      const res = await fetch("/api/lab/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ experiment: Number(id) }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.ok === false) {
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      startExperimentsPolling(true);
+      await refreshLabStatus();
+    } catch (err) {
+      setLabButtonsDisabled(false);
+      $("#labRunStatus").innerHTML = `
+        <span class="pill bad"><span class="dot" aria-hidden="true"></span>${escapeHtml(
+          err.message
+        )}</span>`;
+    }
+  }
+
   function setTab(name) {
     activeTab = name;
     document.querySelectorAll(".tab").forEach((btn) => {
@@ -799,14 +1185,19 @@
       else panel.setAttribute("hidden", "");
     });
 
+    clearInterval(pollTimer);
+    clearInterval(dockerPollTimer);
+    clearInterval(labPollTimer);
+
     if (name === "lab") {
       refreshSnapshot().catch(() => {});
       startLabPolling();
-      clearInterval(dockerPollTimer);
-    } else {
+    } else if (name === "docker") {
       refreshDocker().catch(() => {});
       startDockerPolling();
-      clearInterval(pollTimer);
+    } else if (name === "experiments") {
+      refreshLabStatus().catch(() => {});
+      startExperimentsPolling(false);
     }
   }
 
@@ -831,6 +1222,13 @@
     refreshSnapshot().then(() => setLive("Snapshot refreshed."))
   );
   $("#dockerRefreshBtn").addEventListener("click", () => refreshDocker());
+  $("#labRefreshBtn")?.addEventListener("click", () => refreshLabStatus());
+
+  $("#labExpCards")?.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-lab-run]");
+    if (!btn) return;
+    runLabExperiment(btn.getAttribute("data-lab-run"));
+  });
 
   $("#dockerContainers").addEventListener("click", (e) => {
     const btn = e.target.closest("[data-docker-action]");
@@ -869,10 +1267,13 @@
     if (document.hidden) {
       clearInterval(pollTimer);
       clearInterval(dockerPollTimer);
+      clearInterval(labPollTimer);
     } else if (activeTab === "lab") {
       startLabPolling();
-    } else {
+    } else if (activeTab === "docker") {
       startDockerPolling();
+    } else if (activeTab === "experiments") {
+      startExperimentsPolling(false);
     }
   });
 })();

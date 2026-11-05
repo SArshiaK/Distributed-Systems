@@ -31,6 +31,17 @@
             class="tab"
             type="button"
             role="tab"
+            id="tab-experiments"
+            aria-selected="false"
+            aria-controls="panel-experiments"
+            data-tab="experiments"
+          >
+            Required Experiments
+          </button>
+          <button
+            class="tab"
+            type="button"
+            role="tab"
             id="tab-docker"
             aria-selected="false"
             aria-controls="panel-docker"
@@ -253,6 +264,138 @@
               </div>
             </div>
           </section>
+        </div>
+      </section>
+
+      <section
+        id="panel-experiments"
+        class="tab-panel hidden"
+        role="tabpanel"
+        aria-labelledby="tab-experiments"
+        hidden
+      >
+        <div class="docker-toolbar">
+          <div>
+            <h2 class="docker-title">Live demo · experiments 3 · 6 · 7</h2>
+            <p class="docker-sub">
+              Presentation view: watch real concurrent requests, timeline phases, and
+              before/after proof. Experiments 1, 2, 4, 5 remain on Architecture Lab /
+              Docker Status.
+            </p>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-ghost" type="button" id="labRefreshBtn">Refresh</button>
+          </div>
+        </div>
+
+        <div class="exp-grid" id="labExpCards">
+          <article class="panel exp-card" data-exp="3">
+            <div class="exp-card-head">
+              <h3>3 · Concurrent replicas</h3>
+              <span class="status-chip" id="labBadge3">idle</span>
+            </div>
+            <p>
+              40 deposits + 25 withdraws fire in parallel through Gateway → A1/A2.
+              Watch every reply, replica hit counts, then the exact balance proof.
+            </p>
+            <div class="btn-row">
+              <button class="btn btn-primary" type="button" data-lab-run="3">Demonstrate 3</button>
+            </div>
+          </article>
+
+          <article class="panel exp-card" data-exp="6">
+            <div class="exp-card-head">
+              <h3>6 · Interrupted 2PC</h3>
+              <span class="status-chip" id="labBadge6">idle</span>
+            </div>
+            <p>
+              Cross-shard transfer pauses after durable <code>COMMIT_DECIDED</code>,
+              Coordinator is killed, restarted, and recovery is shown reaching
+              <code>COMPLETED</code> with money moved once.
+            </p>
+            <div class="btn-row">
+              <button class="btn btn-primary" type="button" data-lab-run="6">Demonstrate 6</button>
+            </div>
+          </article>
+
+          <article class="panel exp-card" data-exp="7">
+            <div class="exp-card-head">
+              <h3>7 · Concurrent cross-shard</h3>
+              <span class="status-chip" id="labBadge7">idle</span>
+            </div>
+            <p>
+              Overlapping cross-shard transfers run together. Each 2PC result appears
+              live; finally total money across both shards must stay unchanged.
+            </p>
+            <div class="btn-row">
+              <button class="btn btn-primary" type="button" data-lab-run="7">Demonstrate 7</button>
+            </div>
+          </article>
+        </div>
+
+        <div class="lab-demo-stage" id="labDemoStage">
+          <div class="panel lab-headline-panel">
+            <div class="docker-panel-head">
+              <h2 id="labHeadlineTitle">Demo stage</h2>
+              <span class="muted-note" id="labLogMeta">Idle</span>
+            </div>
+            <p class="lab-headline" id="labHeadline">Pick an experiment to demonstrate.</p>
+            <div class="status-row" id="labRunStatus" aria-live="polite"></div>
+            <div class="status-row" id="labMetrics" aria-live="polite"></div>
+          </div>
+
+          <div class="lab-demo-grid">
+            <div class="panel docker-panel">
+              <div class="docker-panel-head">
+                <h2>Timeline</h2>
+              </div>
+              <ol class="lab-phases" id="labPhases">
+                <li class="muted-note">Phases appear when a demo starts.</li>
+              </ol>
+            </div>
+
+            <div class="panel docker-panel">
+              <div class="docker-panel-head">
+                <h2>Proof board</h2>
+              </div>
+              <div id="labProof" class="lab-proof">
+                <p class="muted-note">Before / after values and formulas show up here.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel docker-panel">
+            <div class="docker-panel-head">
+              <h2>Live requests</h2>
+              <span class="muted-note" id="labReqMeta">0 rows</span>
+            </div>
+            <div class="table-scroll">
+              <table class="docker-table lab-req-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Op</th>
+                    <th>Accounts</th>
+                    <th>Amount</th>
+                    <th>Served by</th>
+                    <th>Result</th>
+                    <th>ms</th>
+                    <th>Detail</th>
+                  </tr>
+                </thead>
+                <tbody id="labReqTable">
+                  <tr><td colspan="8">No requests yet. Start a demo.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="panel docker-panel">
+            <div class="docker-panel-head">
+              <h2>Narration log</h2>
+            </div>
+            <ul class="log-list lab-log" id="labStepLog"></ul>
+          </div>
         </div>
       </section>
 

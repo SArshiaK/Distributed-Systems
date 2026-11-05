@@ -152,8 +152,10 @@ services:
       DB_COORD_URL: postgresql://bank:bank@db-coord:5432/coord
       COMPOSE_PROJECT_NAME: "2"
       DOCKER_SOCK: /var/run/docker.sock
+      FAULT_DIR: /faults
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - ./experiments/faults:/faults
     ports:
       - "3030:3000"
     depends_on:
