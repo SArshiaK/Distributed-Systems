@@ -62,21 +62,74 @@ class TransferRequest(BaseModel):
     from_account: str
     to_account: str
     amount: Any
+    client_request_id: Optional[str] = None
+    epoch: Optional[int] = None
+
+
+_map_mtime: float = -1.0
+_map_epoch: int = 1
 
 
 def get_connection():
     return psycopg.connect(DATABASE_URL, row_factory=dict_row)
 
 
-def load_shard_map() -> None:
-    global _shards
-    raw = json.loads(Path(SHARD_MAP_PATH).read_text(encoding="utf-8"))
-    _shards = raw["shards"]
+def ensure_coord_extras() -> None:
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS client_transfer_requests (
+                    client_request_id TEXT PRIMARY KEY,
+                    transaction_id TEXT NOT NULL,
+                    response_json JSONB NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+                CREATE TABLE IF NOT EXISTS migration_jobs (
+                    migration_id TEXT PRIMARY KEY,
+                    phase TEXT NOT NULL,
+                    epoch_from INT NOT NULL,
+                    epoch_to INT,
+                    source_shard TEXT NOT NULL,
+                    target_shard TEXT NOT NULL,
+                    range_start INT NOT NULL,
+                    range_end INT NOT NULL,
+                    snapshot_pos BIGINT,
+                    catchup_pos BIGINT,
+                    checkpoint_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+                    cutover_decided BOOLEAN NOT NULL DEFAULT FALSE,
+                    error TEXT,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+                """
+            )
+        conn.commit()
+
+
+def load_shard_map(force: bool = False) -> bool:
+    global _shards, _map_mtime, _map_epoch
+    path = Path(SHARD_MAP_PATH)
+    try:
+        mtime = path.stat().st_mtime
+    except FileNotFoundError:
+        return False
     with _lock:
+        if not force and mtime == _map_mtime:
+            return False
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        _shards = raw["shards"]
+        _map_epoch = int(raw.get("epoch", 1))
+        _map_mtime = mtime
         for sid, meta in _shards.items():
             _rr.setdefault(sid, 0)
             for url in meta["replicas"]:
                 _healthy.setdefault(url, False)
+        for sid in list(_rr):
+            if sid not in _shards:
+                _rr.pop(sid, None)
+        logger.info(f"shard_map_loaded  epoch={_map_epoch}  shards={list(_shards)}")
+        return True
 
 
 def shard_for_account(account: str) -> str:
@@ -254,6 +307,7 @@ def run_prepare(tx: dict) -> bool:
                     "operation": p["operation"],
                     "account": p["account"],
                     "amount": str(amount),
+                    "epoch": _map_epoch,
                 },
             )
             vote = str(resp.get("vote", "NO")).upper()
@@ -349,15 +403,17 @@ def recover_all() -> None:
 
 def health_loop() -> None:
     while not _stop.is_set():
-        for meta in _shards.values():
-            for url in meta["replicas"]:
+        load_shard_map(force=False)
+        with _lock:
+            urls = [u for meta in _shards.values() for u in meta["replicas"]]
+        for url in urls:
+            ok = False
+            try:
+                r = requests.get(f"{url.rstrip('/')}/health", timeout=1.5)
+                ok = r.status_code == 200 and r.json().get("status") == "ok"
+            except (requests.RequestException, ValueError, TypeError):
                 ok = False
-                try:
-                    r = requests.get(f"{url.rstrip('/')}/health", timeout=1.5)
-                    ok = r.status_code == 200 and r.json().get("status") == "ok"
-                except (requests.RequestException, ValueError, TypeError):
-                    ok = False
-                mark(url, ok)
+            mark(url, ok)
         _stop.wait(2)
 
 
@@ -375,14 +431,15 @@ app = FastAPI(title="Transaction Coordinator")
 
 @app.on_event("startup")
 def on_startup() -> None:
-    load_shard_map()
+    ensure_coord_extras()
+    load_shard_map(force=True)
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT 1")
     threading.Thread(target=health_loop, name="coord-health", daemon=True).start()
     recover_all()
     threading.Thread(target=recovery_loop, name="coord-recovery", daemon=True).start()
-    logger.info(f"coordinator_start  port={PORT}")
+    logger.info(f"coordinator_start  port={PORT}  epoch={_map_epoch}")
 
 
 @app.on_event("shutdown")
@@ -392,7 +449,55 @@ def on_shutdown() -> None:
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok", "service": "coordinator"}
+    load_shard_map(force=False)
+    return {"status": "ok", "service": "coordinator", "epoch": _map_epoch}
+
+
+@app.post("/admin/reload-map")
+def reload_map() -> dict:
+    changed = load_shard_map(force=True)
+    return {"status": "ok", "reloaded": changed, "epoch": _map_epoch, "shards": list(_shards)}
+
+
+@app.get("/requests/{client_request_id}")
+def client_request_status(client_request_id: str):
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT transaction_id, response_json FROM client_transfer_requests "
+                "WHERE client_request_id = %s",
+                (client_request_id,),
+            )
+            row = cur.fetchone()
+    if not row:
+        return JSONResponse(
+            status_code=404,
+            content={"status": "UNKNOWN", "client_request_id": client_request_id},
+        )
+    payload = row["response_json"]
+    if isinstance(payload, str):
+        payload = json.loads(payload)
+    return {
+        "status": "FOUND",
+        "client_request_id": client_request_id,
+        "transaction_id": row["transaction_id"],
+        "response": payload,
+    }
+
+
+def _store_client_transfer(client_request_id: Optional[str], tx_id: str, response: dict) -> None:
+    if not client_request_id:
+        return
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO client_transfer_requests "
+                "(client_request_id, transaction_id, response_json) "
+                "VALUES (%s, %s, %s::jsonb) "
+                "ON CONFLICT (client_request_id) DO NOTHING",
+                (client_request_id, tx_id, json.dumps(response)),
+            )
+        conn.commit()
 
 
 @app.get("/transactions/{tx_id}")
@@ -425,11 +530,32 @@ def transaction_status(tx_id: str):
 def transfer(body: TransferRequest):
     from_account = body.from_account.strip()
     to_account = body.to_account.strip()
+    client_request_id = (body.client_request_id or "").strip() or None
     if from_account == to_account:
         return JSONResponse(
             status_code=400,
             content={"status": "error", "message": "from_account and to_account must differ"},
         )
+
+    load_shard_map(force=False)
+
+    if client_request_id:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT transaction_id, response_json FROM client_transfer_requests "
+                    "WHERE client_request_id = %s",
+                    (client_request_id,),
+                )
+                cached = cur.fetchone()
+        if cached:
+            payload = cached["response_json"]
+            if isinstance(payload, str):
+                payload = json.loads(payload)
+            payload = dict(payload)
+            payload["idempotent_replay"] = True
+            return payload
+
     try:
         amount = parse_amount(body.amount)
         from_shard = shard_for_account(from_account)
@@ -461,59 +587,61 @@ def transfer(body: TransferRequest):
         if commit:
             done = run_commit(tx_id)
             if not done:
-                return JSONResponse(
-                    status_code=202,
-                    content={
-                        "status": "PENDING",
-                        "message": "COMMIT decided; waiting for participant acks",
-                        "transaction_id": tx_id,
-                        "mode": "cross_shard",
-                    },
-                )
-            return {
+                content = {
+                    "status": "PENDING",
+                    "message": "COMMIT decided; waiting for participant acks",
+                    "transaction_id": tx_id,
+                    "client_request_id": client_request_id,
+                    "mode": "cross_shard",
+                }
+                _store_client_transfer(client_request_id, tx_id, content)
+                return JSONResponse(status_code=202, content=content)
+            content = {
                 "status": "success",
                 "transaction_id": tx_id,
+                "client_request_id": client_request_id,
                 "from_account": from_account,
                 "to_account": to_account,
                 "amount": float(amount),
                 "mode": "cross_shard",
                 "decision": "COMMIT",
             }
+            _store_client_transfer(client_request_id, tx_id, content)
+            return content
         done = run_abort(tx_id)
-        return JSONResponse(
-            status_code=400,
-            content={
-                "status": "aborted",
-                "transaction_id": tx_id,
-                "mode": "cross_shard",
-                "decision": "ABORT",
-                "message": "2PC aborted",
-                "completed": done,
-            },
-        )
+        content = {
+            "status": "aborted",
+            "transaction_id": tx_id,
+            "client_request_id": client_request_id,
+            "mode": "cross_shard",
+            "decision": "ABORT",
+            "message": "2PC aborted",
+            "completed": done,
+        }
+        _store_client_transfer(client_request_id, tx_id, content)
+        return JSONResponse(status_code=400, content=content)
     except Exception as exc:
         logger.exception(f"transfer_error  tx={tx_id}")
-        # Fail closed toward abort if decision not yet commit.
         current = get_tx(tx_id)
         if current and current["status"] == "COMMIT_DECIDED":
-            return JSONResponse(
-                status_code=202,
-                content={
-                    "status": "PENDING",
-                    "transaction_id": tx_id,
-                    "message": str(exc),
-                },
-            )
+            content = {
+                "status": "PENDING",
+                "transaction_id": tx_id,
+                "client_request_id": client_request_id,
+                "message": str(exc),
+            }
+            _store_client_transfer(client_request_id, tx_id, content)
+            return JSONResponse(status_code=202, content=content)
         set_status(tx_id, "ABORT_DECIDED")
         run_abort(tx_id)
-        return JSONResponse(
-            status_code=500,
-            content={
-                "status": "aborted",
-                "transaction_id": tx_id,
-                "message": str(exc),
-            },
-        )
+        content = {
+            "status": "aborted",
+            "transaction_id": tx_id,
+            "client_request_id": client_request_id,
+            "message": str(exc),
+        }
+        _store_client_transfer(client_request_id, tx_id, content)
+        return JSONResponse(status_code=500, content=content)
 
 
 if __name__ == "__main__":

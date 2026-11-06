@@ -42,6 +42,28 @@
             class="tab"
             type="button"
             role="tab"
+            id="tab-reshard"
+            aria-selected="false"
+            aria-controls="panel-reshard"
+            data-tab="reshard"
+          >
+            Live Re-Shard
+          </button>
+          <button
+            class="tab"
+            type="button"
+            role="tab"
+            id="tab-heal"
+            aria-selected="false"
+            aria-controls="panel-heal"
+            data-tab="heal"
+          >
+            Self-Heal
+          </button>
+          <button
+            class="tab"
+            type="button"
+            role="tab"
             id="tab-docker"
             aria-selected="false"
             aria-controls="panel-docker"
@@ -396,6 +418,221 @@
             </div>
             <ul class="log-list lab-log" id="labStepLog"></ul>
           </div>
+        </div>
+      </section>
+
+      <section
+        id="panel-reshard"
+        class="tab-panel hidden"
+        role="tabpanel"
+        aria-labelledby="tab-reshard"
+        hidden
+      >
+        <div class="docker-toolbar">
+          <div>
+            <h2 class="docker-title">Bonus I · Live Re-Sharding</h2>
+            <p class="docker-sub">
+              Real-time view of DB A/B/C, fence/cutover/cleanup, and 2PC. Live requests
+              stream continuously in the right sidebar.
+            </p>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-accent" type="button" id="bonusTrafficStart">Start traffic</button>
+            <button class="btn btn-ghost" type="button" id="bonusTrafficStop">Stop traffic</button>
+            <button class="btn btn-ghost" type="button" id="bonusClearLogs">Clear logs</button>
+            <button class="btn btn-ghost" type="button" id="bonusResetState">Reset B/C</button>
+            <button class="btn btn-primary" type="button" id="bonusMigrateStart">Start migration</button>
+            <button class="btn btn-ghost" type="button" id="bonusMigrateStop">Stop migration</button>
+            <button class="btn btn-accent" type="button" id="bonusMigrateResume">Resume migration</button>
+          </div>
+        </div>
+
+        <div class="status-row" id="bonusTopStatus" aria-live="polite"></div>
+
+        <div class="bonus-shell">
+          <div class="bonus-main">
+            <div class="panel lab-headline-panel">
+              <div class="docker-panel-head">
+                <h2>Migration timeline</h2>
+                <span class="muted-note" id="bonusPhaseMeta">idle</span>
+              </div>
+              <p class="lab-headline" id="bonusHeadline">Start traffic, then start migration.</p>
+              <ol class="lab-phases" id="bonusPhases"></ol>
+              <ul class="log-list lab-log" id="bonusMigLog"></ul>
+            </div>
+
+            <div class="bonus-db-grid">
+              <div class="panel db-panel a">
+                <div class="docker-panel-head">
+                  <h3>Database A</h3>
+                  <span class="muted-note" id="bonusDbAMeta">—</span>
+                </div>
+                <div class="status-row" id="bonusOwnA"></div>
+                <div class="table-scroll">
+                  <table>
+                    <thead><tr><th>Account</th><th>Balance</th></tr></thead>
+                    <tbody id="bonusTableA"></tbody>
+                  </table>
+                </div>
+                <h3 class="coord-subhead">Changelog</h3>
+                <div class="table-scroll"><table class="docker-table"><tbody id="bonusChangeA"></tbody></table></div>
+              </div>
+              <div class="panel db-panel b">
+                <div class="docker-panel-head">
+                  <h3>Database B</h3>
+                  <span class="muted-note" id="bonusDbBMeta">—</span>
+                </div>
+                <div class="status-row" id="bonusOwnB"></div>
+                <div class="table-scroll">
+                  <table>
+                    <thead><tr><th>Account</th><th>Balance</th></tr></thead>
+                    <tbody id="bonusTableB"></tbody>
+                  </table>
+                </div>
+                <h3 class="coord-subhead">Changelog</h3>
+                <div class="table-scroll"><table class="docker-table"><tbody id="bonusChangeB"></tbody></table></div>
+              </div>
+              <div class="panel db-panel c">
+                <div class="docker-panel-head">
+                  <h3>Database C</h3>
+                  <span class="muted-note" id="bonusDbCMeta">—</span>
+                </div>
+                <div class="status-row" id="bonusOwnC"></div>
+                <div class="table-scroll">
+                  <table>
+                    <thead><tr><th>Account</th><th>Balance</th></tr></thead>
+                    <tbody id="bonusTableC"></tbody>
+                  </table>
+                </div>
+                <h3 class="coord-subhead">Changelog</h3>
+                <div class="table-scroll"><table class="docker-table"><tbody id="bonusChangeC"></tbody></table></div>
+              </div>
+            </div>
+
+            <div class="panel docker-panel">
+              <div class="docker-panel-head">
+                <h2>2PC · migrating accounts</h2>
+                <span class="muted-note" id="bonus2pcMeta">—</span>
+              </div>
+              <h3 class="coord-subhead">In-flight / blocked</h3>
+              <div class="table-scroll">
+                <table class="docker-table">
+                  <thead>
+                    <tr>
+                      <th>Tx</th>
+                      <th>From → To</th>
+                      <th>Shards</th>
+                      <th>Status</th>
+                      <th>Updated</th>
+                    </tr>
+                  </thead>
+                  <tbody id="bonusInflightTable">
+                    <tr><td colspan="5">None</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <h3 class="coord-subhead">Recent completed / decided</h3>
+              <div class="table-scroll">
+                <table class="docker-table">
+                  <thead>
+                    <tr>
+                      <th>Tx</th>
+                      <th>From → To</th>
+                      <th>Shards</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="bonusRecent2pcTable">
+                    <tr><td colspan="4">—</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <aside class="bonus-request-rail panel" aria-label="Live request stream">
+            <div class="docker-panel-head">
+              <h2>Live requests</h2>
+              <span class="muted-note" id="bonusReqMeta">0</span>
+            </div>
+            <p class="bonus-rail-hint">Incoming deposit / withdraw / transfer stream</p>
+            <div class="bonus-request-stream" id="bonusReqStream">
+              <div class="bonus-req-empty">Start traffic to stream live requests here.</div>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section
+        id="panel-heal"
+        class="tab-panel hidden"
+        role="tabpanel"
+        aria-labelledby="tab-heal"
+        hidden
+      >
+        <div class="docker-toolbar">
+          <div>
+            <h2 class="docker-title">Self-Healing</h2>
+            <p class="docker-sub">
+              Start traffic, crash one replica, watch the controller replace it while
+              the healthy peer keeps answering.
+            </p>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-accent" type="button" id="healTrafficStart">Start traffic</button>
+            <button class="btn btn-ghost" type="button" id="healTrafficStop">Stop traffic</button>
+            <button class="btn btn-primary" type="button" id="healDemoCrashA">
+              Demo · traffic + crash A
+            </button>
+          </div>
+        </div>
+
+        <div class="status-row" id="healTopStatus" aria-live="polite"></div>
+        <p class="lab-headline" id="healHeadline">Start traffic, then press Crash on a replica.</p>
+
+        <div class="bonus-shell">
+          <div class="bonus-main">
+            <div class="panel">
+              <div class="docker-panel-head">
+                <h2>Recovery flow</h2>
+                <span class="muted-note" id="healFlowMeta">idle</span>
+              </div>
+              <ol class="heal-flow" id="healFlowSteps">
+                <li data-step="watch" class="active">1 · Watch</li>
+                <li data-step="crash">2 · Crash detected</li>
+                <li data-step="create">3 · Create replacement</li>
+                <li data-step="register">4 · Register in Gateway</li>
+                <li data-step="done">5 · Healthy again</li>
+              </ol>
+            </div>
+
+            <div class="panel" style="margin-top: 16px">
+              <div class="docker-panel-head">
+                <h2>Replicas</h2>
+                <span class="muted-note">press Crash — peer stays up</span>
+              </div>
+              <div class="heal-simple-grid" id="healSlotsTable"></div>
+            </div>
+
+            <div class="panel" style="margin-top: 16px">
+              <div class="docker-panel-head">
+                <h2>Controller log</h2>
+                <span class="muted-note" id="healReqMeta">—</span>
+              </div>
+              <ul class="log-list lab-log" id="healEventLog"></ul>
+            </div>
+          </div>
+
+          <aside class="bonus-request-rail panel" aria-label="Live request stream">
+            <div class="docker-panel-head">
+              <h2>Live requests</h2>
+              <span class="muted-note" id="healStreamMeta">0</span>
+            </div>
+            <p class="bonus-rail-hint">Which replica answered each request</p>
+            <div class="bonus-request-stream" id="healReqStream">
+              <div class="bonus-req-empty">Start traffic to stream requests here.</div>
+            </div>
+          </aside>
         </div>
       </section>
 

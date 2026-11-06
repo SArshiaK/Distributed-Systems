@@ -13,10 +13,38 @@
   let pollTimer;
   let dockerPollTimer;
   let labPollTimer;
+  let bonusPollTimer;
+  let healPollTimer;
+  let healEventCount = 0;
+  let healSlotSig = "";
+  let healReqSig = "";
+  let healBusy = false;
+  const healUi = {
+    focusSlot: null,
+    focusGen: null,
+    step: "watch",
+    message: "",
+    crashedAt: 0,
+  };
   let activeTab = "lab";
   let labStepCount = 0;
   let labReqCount = 0;
   let labPhaseSig = "";
+  let bonusMigLogCount = 0;
+  let bonusLogClearedAt = 0;
+  const PHASE_ORDER = [
+    "INIT",
+    "PROVISION_TARGET",
+    "SNAPSHOT",
+    "CATCHUP",
+    "FENCE_SOURCE",
+    "FINAL_CATCHUP",
+    "WAIT_INFLIGHT_2PC",
+    "ACTIVATE_MAP",
+    "VERIFY",
+    "CLEANUP_SOURCE",
+    "DONE",
+  ];
 
   if (window.gsap && window.MotionPathPlugin) {
     gsap.registerPlugin(MotionPathPlugin);
@@ -1171,6 +1199,548 @@
     }
   }
 
+  function fmtOwn(own) {
+    if (!own || own.ok === false) {
+      return `<span class="pill bad"><span class="dot" aria-hidden="true"></span>${escapeHtml(
+        own?.error || "unavailable"
+      )}</span>`;
+    }
+    const fence =
+      own.fenced_start != null
+        ? `fence ${own.fenced_start}-${own.fenced_end}`
+        : "no fence";
+    return `
+      <span class="pill"><span class="dot" aria-hidden="true"></span>epoch ${own.epoch ?? "—"}</span>
+      <span class="pill"><span class="dot" aria-hidden="true"></span>owned ${own.owned_start}-${own.owned_end}</span>
+      <span class="pill ${own.write_enabled ? "ok" : "bad"}"><span class="dot" aria-hidden="true"></span>writes ${
+        own.write_enabled ? "ON" : "OFF"
+      }</span>
+      <span class="pill ${own.fenced_start != null ? "bad" : ""}"><span class="dot" aria-hidden="true"></span>${escapeHtml(
+        fence
+      )}</span>
+    `;
+  }
+
+  function renderBonusDb(letter, db) {
+    const tbody = document.getElementById(`bonusTable${letter}`);
+    const meta = document.getElementById(`bonusDb${letter}Meta`);
+    const chBody = document.getElementById(`bonusChange${letter}`);
+    const ownRow = document.getElementById(`bonusOwn${letter}`);
+    if (!tbody) return;
+    if (!db?.ok) {
+      if (meta) meta.textContent = db?.error || "unavailable";
+      tbody.innerHTML = `<tr><td colspan="2">DB ${letter} unavailable</td></tr>`;
+      if (chBody) chBody.innerHTML = "";
+      return;
+    }
+    const mig = db.range_1501_2000 || {};
+    const low = db.range_1001_1500 || {};
+    if (meta) {
+      meta.textContent = `n=${db.total_count} sum=${Number(db.total_sum).toFixed(2)} · mig ${
+        mig.count ?? 0
+      }/${Number(mig.sum || 0).toFixed(0)} · lowB ${low.count ?? 0}`;
+    }
+    const rows = db.accounts || [];
+    tbody.innerHTML = rows.length
+      ? rows
+          .map(
+            (r) =>
+              `<tr><td>${escapeHtml(r.account_id)}</td><td>${Number(r.balance).toFixed(
+                2
+              )}</td></tr>`
+          )
+          .join("")
+      : `<tr><td colspan="2">no watched rows</td></tr>`;
+    const changes = db.changelog || [];
+    if (chBody) {
+      chBody.innerHTML = changes.length
+        ? changes
+            .map(
+              (c) =>
+                `<tr><td class="mono">${c.seq}</td><td>${escapeHtml(c.op)}</td><td>${escapeHtml(
+                  c.account_id
+                )}</td><td>${Number(c.balance).toFixed(2)}</td></tr>`
+            )
+            .join("")
+        : `<tr><td colspan="4">no changelog yet</td></tr>`;
+    }
+    if (ownRow && letter !== "A") {
+      // filled from ownership admin below
+    }
+  }
+
+  function renderBonusLive(data) {
+    const top = $("#bonusTopStatus");
+    const headline = $("#bonusHeadline");
+    const phaseMeta = $("#bonusPhaseMeta");
+    const phasesEl = $("#bonusPhases");
+    const migLog = $("#bonusMigLog");
+    if (!top) return;
+
+    const mig = data.migrator || {};
+    const job = mig.job || {};
+    const phase = job.phase || mig.phase || "idle";
+    const traffic = data.traffic || {};
+    const sm = data.shard_map || {};
+    const runningMig = !!mig.running;
+    const stoppedMig = !!mig.stopped && !runningMig;
+    const trafficOn = !!traffic.running;
+    const migLabel = runningMig
+      ? `LIVE · ${phase}`
+      : stoppedMig
+        ? `STOPPED · ${phase}`
+        : phase;
+
+    top.innerHTML = `
+      <span class="pill ${runningMig ? "" : mig.passed ? "ok" : stoppedMig ? "bad" : ""}"><span class="dot" aria-hidden="true"></span>Migration ${
+        escapeHtml(migLabel)
+      }</span>
+      <span class="pill ${trafficOn ? "ok" : ""}"><span class="dot" aria-hidden="true"></span>Traffic ${
+        trafficOn ? "ON" : "OFF"
+      } · sent ${traffic.stats?.sent ?? 0}</span>
+      <span class="pill"><span class="dot" aria-hidden="true"></span>Map epoch ${
+        sm.epoch ?? "—"
+      }</span>
+      <span class="pill"><span class="dot" aria-hidden="true"></span>Shards ${Object.keys(
+        sm.shards || {}
+      ).join(",") || "—"}</span>
+      <span class="pill ${ (data.inflight_2pc || []).length ? "bad" : "ok" }"><span class="dot" aria-hidden="true"></span>In-flight 2PC ${(
+        data.inflight_2pc || []
+      ).length}</span>
+    `;
+
+    const events = (mig.events || []).filter((e) => !bonusLogClearedAt || (e.t || 0) > bonusLogClearedAt);
+
+    if (headline) {
+      const last = events.length ? events[events.length - 1].message : "Waiting…";
+      headline.textContent = last;
+      headline.classList.remove("pass", "fail", "run");
+      if (runningMig) headline.classList.add("run");
+      else if (phase === "DONE" || mig.passed) headline.classList.add("pass");
+      else if (mig.passed === false) headline.classList.add("fail");
+    }
+    if (phaseMeta) {
+      phaseMeta.textContent = runningMig
+        ? `live · ${phase}`
+        : `phase ${phase}`;
+    }
+
+    if (phasesEl) {
+      const idx = PHASE_ORDER.indexOf(phase);
+      phasesEl.innerHTML = PHASE_ORDER.map((p, i) => {
+        let st = "";
+        if (phase === "DONE" || (idx >= 0 && i < idx)) st = "done";
+        else if (p === phase) st = runningMig ? "active" : phase === "DONE" ? "done" : "active";
+        if (mig.passed === false && p === phase) st = "fail";
+        return `<li class="${st}"><span class="phase-label">${p}</span></li>`;
+      }).join("");
+    }
+
+    if (migLog && events.length !== bonusMigLogCount) {
+      bonusMigLogCount = events.length;
+      migLog.innerHTML = events.length
+        ? events
+            .slice()
+            .reverse()
+            .slice(0, 40)
+            .map((e) => {
+              const cls = e.level === "pass" ? "pass" : e.level === "fail" ? "fail" : "";
+              const ts = e.t ? new Date(e.t * 1000).toLocaleTimeString() : "";
+              return `<li class="${cls}">${escapeHtml(ts)} · ${escapeHtml(e.message)}</li>`;
+            })
+            .join("")
+        : "";
+    }
+
+    renderBonusDb("A", data.databases?.A);
+    renderBonusDb("B", data.databases?.B);
+    renderBonusDb("C", data.databases?.C);
+    const ownA = $("#bonusOwnA");
+    const ownB = $("#bonusOwnB");
+    const ownC = $("#bonusOwnC");
+    if (ownA) ownA.innerHTML = `<span class="pill ok"><span class="dot" aria-hidden="true"></span>stable shard A</span>`;
+    if (ownB) ownB.innerHTML = fmtOwn(data.ownership?.B || data.databases?.B?.ownership);
+    if (ownC) ownC.innerHTML = fmtOwn(data.ownership?.C || data.databases?.C?.ownership);
+
+    const reqStream = $("#bonusReqStream");
+    const reqMeta = $("#bonusReqMeta");
+    const reqs = (traffic.requests || []).slice().reverse();
+    if (reqMeta) {
+      reqMeta.textContent = `${reqs.length} · ok ${traffic.stats?.ok ?? 0} · fail ${
+        traffic.stats?.fail ?? 0
+      } · fence ${traffic.stats?.fenced ?? 0}`;
+    }
+    if (reqStream) {
+      if (!reqs.length) {
+        reqStream.innerHTML =
+          `<div class="bonus-req-empty">Start traffic to stream live requests here.</div>`;
+      } else {
+        reqStream.innerHTML = reqs
+          .slice(0, 100)
+          .map((r) => {
+            const acc = r.to_account ? `${r.account} → ${r.to_account}` : r.account || "—";
+            const served = [r.shard, r.replica].filter(Boolean).join(" / ") || "—";
+            let state = "pending";
+            let label = r.detail || "…";
+            if (r.ok && !r.pending) {
+              state = "ok";
+              label = r.decision || "OK";
+            } else if (r.pending) {
+              state = "pending";
+              label = "PENDING";
+            } else if (r.ok === false) {
+              state = "fail";
+              label = "FAIL";
+            }
+            const ts = r.t ? new Date(r.t * 1000).toLocaleTimeString() : "";
+            return `<article class="bonus-req-card ${state}">
+              <div class="bonus-req-top">
+                <span class="bonus-req-op">${escapeHtml(r.kind || "op")}</span>
+                <span class="bonus-req-time">${escapeHtml(ts)}</span>
+              </div>
+              <div class="bonus-req-accounts">${escapeHtml(acc)}</div>
+              <div class="bonus-req-meta">
+                <span>${escapeHtml(served)}</span>
+                <span>${r.ms != null ? r.ms + " ms" : "—"}</span>
+                <span class="bonus-req-result ${state}">${escapeHtml(label)}</span>
+              </div>
+              <div class="bonus-req-detail">${escapeHtml(r.detail || "")}${
+                r.tx ? " · tx " + escapeHtml(r.tx) : ""
+              }</div>
+            </article>`;
+          })
+          .join("");
+      }
+    }
+
+    const inflight = data.inflight_2pc || [];
+    const recent = data.recent_2pc || [];
+    const infBody = $("#bonusInflightTable");
+    const recentBody = $("#bonusRecent2pcTable");
+    const p2meta = $("#bonus2pcMeta");
+    if (p2meta) p2meta.textContent = `${inflight.length} in-flight · ${recent.length} recent`;
+    if (infBody) {
+      infBody.innerHTML = inflight.length
+        ? inflight
+            .map(
+              (t) => `<tr>
+                <td class="mono">${escapeHtml(String(t.transaction_id).slice(0, 8))}</td>
+                <td>${escapeHtml(t.from_account)} → ${escapeHtml(t.to_account)}</td>
+                <td>${escapeHtml(t.from_shard)} → ${escapeHtml(t.to_shard)}</td>
+                <td><span class="status-chip ${escapeHtml(String(t.status).toLowerCase())}">${escapeHtml(
+                  t.status
+                )}</span></td>
+                <td>${escapeHtml((t.updated_at || "").split("T").pop() || "")}</td>
+              </tr>`
+            )
+            .join("")
+        : `<tr><td colspan="5">None — no blocked/open 2PC on migrating accounts</td></tr>`;
+    }
+    if (recentBody) {
+      recentBody.innerHTML = recent.length
+        ? recent
+            .map(
+              (t) => `<tr>
+                <td class="mono">${escapeHtml(String(t.transaction_id).slice(0, 8))}</td>
+                <td>${escapeHtml(t.from_account)} → ${escapeHtml(t.to_account)}</td>
+                <td>${escapeHtml(t.from_shard)} → ${escapeHtml(t.to_shard)}</td>
+                <td><span class="status-chip ${escapeHtml(String(t.status).toLowerCase())}">${escapeHtml(
+                  t.status
+                )}</span></td>
+              </tr>`
+            )
+            .join("")
+        : `<tr><td colspan="4">—</td></tr>`;
+    }
+  }
+
+  function startBonusPolling() {
+    clearInterval(bonusPollTimer);
+    bonusPollTimer = setInterval(() => {
+      if (!document.hidden && activeTab === "reshard") {
+        refreshBonusLive().catch(() => {});
+      }
+    }, 300);
+  }
+
+  async function refreshBonusLive() {
+    const res = await fetch("/api/bonus/live");
+    const data = await res.json();
+    renderBonusLive(data);
+    return data;
+  }
+
+  function healShortHost(s) {
+    return String(s.dns || s.url || s.slot_id)
+      .replace(/^https?:\/\//, "")
+      .replace(/:8000$/, "");
+  }
+
+  function healDeriveStep(data, slots) {
+    const events = data.events || [];
+    const last = events.length ? events[events.length - 1] : null;
+    const msg = last?.message || "";
+
+    if (healUi.focusSlot) {
+      const focused = slots.find((s) => s.slot_id === healUi.focusSlot);
+      if (
+        focused &&
+        focused.status === "healthy" &&
+        healUi.focusGen != null &&
+        Number(focused.generation) > Number(healUi.focusGen) &&
+        Date.now() - healUi.crashedAt > 800
+      ) {
+        healUi.step = "done";
+        healUi.message = `Recovered ${focused.slot_id} → ${healShortHost(focused)}`;
+        return "done";
+      }
+    }
+
+    if (data.replacing || data.pending) {
+      if (/registered|register/i.test(msg)) return "register";
+      if (/creating|create|replacement/i.test(msg)) return "create";
+      return "create";
+    }
+    if (healUi.focusSlot) {
+      const focused = slots.find((s) => s.slot_id === healUi.focusSlot);
+      if (focused && focused.status !== "healthy") return "crash";
+      if (Date.now() - healUi.crashedAt < 12000 && healUi.step !== "done") {
+        if (/registered/i.test(msg)) return "register";
+        if (/creating|replacement/i.test(msg)) return "create";
+        return healUi.step === "watch" ? "crash" : healUi.step;
+      }
+    }
+    if (/injected crash|unhealthy streak/i.test(msg) && Date.now() - healUi.crashedAt < 8000) {
+      return "crash";
+    }
+    return healUi.step === "done" && Date.now() - healUi.crashedAt < 8000 ? "done" : "watch";
+  }
+
+  function renderHealFlow(step) {
+    const order = ["watch", "crash", "create", "register", "done"];
+    const idx = order.indexOf(step);
+    document.querySelectorAll("#healFlowSteps [data-step]").forEach((el) => {
+      const s = el.getAttribute("data-step");
+      const i = order.indexOf(s);
+      el.classList.toggle("active", s === step);
+      el.classList.toggle("hot", s === step && (step === "crash" || step === "create"));
+      el.classList.toggle("done", i >= 0 && idx >= 0 && i < idx);
+    });
+    const meta = $("#healFlowMeta");
+    if (meta) meta.textContent = step;
+  }
+
+  function renderHeal(data) {
+    const top = $("#healTopStatus");
+    if (!top) return;
+    if (data?.ok === false) {
+      top.innerHTML = `<span class="pill bad"><span class="dot" aria-hidden="true"></span>${escapeHtml(
+        data.error || "healer unavailable"
+      )}</span>`;
+      return;
+    }
+
+    const traffic = data.traffic || {};
+    const summary = data.summary || {};
+    const events = data.events || [];
+    const slots = [];
+    Object.values(data.slots || {}).forEach((rows) => slots.push(...rows));
+
+    const step = healDeriveStep(data, slots);
+    healUi.step = step;
+    renderHealFlow(step);
+
+    const phaseLabel =
+      step === "crash"
+        ? "Crash detected"
+        : step === "create"
+          ? "Creating replacement…"
+          : step === "register"
+            ? "Registering with Gateway…"
+            : step === "done"
+              ? "Recovered"
+              : "Watching";
+
+    top.innerHTML = `
+      <span class="pill ${step === "watch" || step === "done" ? "ok" : "bad"}"><span class="dot" aria-hidden="true"></span>${escapeHtml(
+        phaseLabel
+      )}</span>
+      <span class="pill"><span class="dot" aria-hidden="true"></span>A ${summary.A?.healthy ?? 0}/2</span>
+      <span class="pill"><span class="dot" aria-hidden="true"></span>B ${summary.B?.healthy ?? 0}/2</span>
+      <span class="pill ${traffic.running ? "ok" : ""}"><span class="dot" aria-hidden="true"></span>Traffic ${
+        traffic.running ? "ON" : "OFF"
+      } · ${traffic.stats?.ok ?? 0}/${traffic.stats?.sent ?? 0} ok</span>
+    `;
+
+    const headline = $("#healHeadline");
+    if (headline) {
+      headline.textContent =
+        healUi.message ||
+        (events.length ? events[events.length - 1].message : "Start traffic, then press Crash.");
+    }
+
+    const sig = slots
+      .map((s) => {
+        const forcedDown =
+          healUi.focusSlot === s.slot_id &&
+          step !== "done" &&
+          step !== "watch" &&
+          Date.now() - healUi.crashedAt < 15000;
+        const st = forcedDown && s.status === "healthy" && step !== "done" ? "healing" : s.status;
+        return `${s.slot_id}|${st}|${s.dns}|${s.generation}|${healBusy ? 1 : 0}`;
+      })
+      .join(";");
+
+    const grid = $("#healSlotsTable");
+    if (grid && sig !== healSlotSig) {
+      healSlotSig = sig;
+      grid.innerHTML = slots
+        .map((s) => {
+          const forcedDown =
+            healUi.focusSlot === s.slot_id &&
+            step !== "done" &&
+            step !== "watch" &&
+            Date.now() - healUi.crashedAt < 15000;
+          const healing = forcedDown && s.status === "healthy" && step !== "done";
+          const up = s.status === "healthy" && !forcedDown;
+          const label = healing ? "healing" : up ? "up" : "down";
+          const host = healShortHost(s);
+          const canCrash = up && !healBusy && !data.replacing;
+          return `<div class="heal-card ${up ? "up" : healing ? "healing" : "down"}" data-slot="${escapeHtml(
+            s.slot_id
+          )}">
+            <div class="heal-card-top">
+              <strong>${escapeHtml(s.slot_id)} · shard ${escapeHtml(s.shard)}</strong>
+              <span class="status-chip ${up ? "ok" : "bad"}">${label}</span>
+            </div>
+            <div class="mono heal-card-host">${escapeHtml(host)}</div>
+            <button class="btn btn-ghost" type="button" data-heal-crash="${escapeHtml(
+              s.slot_id
+            )}" ${canCrash ? "" : "disabled"}>${healBusy && healUi.focusSlot === s.slot_id ? "Working…" : "Crash"}</button>
+          </div>`;
+        })
+        .join("");
+    }
+
+    const reqMeta = $("#healReqMeta");
+    if (reqMeta) {
+      reqMeta.textContent = traffic.running
+        ? `traffic on · ${traffic.stats?.sent ?? 0} sent`
+        : "traffic off";
+    }
+
+    const logEl = $("#healEventLog");
+    if (logEl && events.length !== healEventCount) {
+      healEventCount = events.length;
+      const important = events.filter((e) => ["pass", "fail", "phase"].includes(e.level));
+      const show = (important.length ? important : events).slice().reverse().slice(0, 10);
+      logEl.innerHTML = show.length
+        ? show
+            .map((e) => {
+              const cls = e.level === "pass" ? "pass" : e.level === "fail" ? "fail" : "";
+              return `<li class="${cls}">${escapeHtml(e.message)}</li>`;
+            })
+            .join("")
+        : `<li class="muted-note">No events yet.</li>`;
+    }
+
+    const stream = $("#healReqStream");
+    const streamMeta = $("#healStreamMeta");
+    const reqs = traffic.requests || [];
+    if (streamMeta) streamMeta.textContent = String(traffic.stats?.sent ?? reqs.length);
+    const rsig = reqs
+      .slice(-40)
+      .map((r) => `${r.id}|${r.ok}|${r.replica || ""}`)
+      .join(";");
+    if (stream && rsig !== healReqSig) {
+      healReqSig = rsig;
+      if (!reqs.length) {
+        stream.innerHTML = `<div class="bonus-req-empty">Start traffic to stream requests here.</div>`;
+      } else {
+        stream.innerHTML = reqs
+          .slice()
+          .reverse()
+          .slice(0, 40)
+          .map((r) => {
+            const cls = r.ok ? "ok" : "bad";
+            const ts = r.t ? new Date(r.t * 1000).toLocaleTimeString() : "";
+            const rep = String(r.replica || "—")
+              .replace(/^https?:\/\//, "")
+              .replace(/:8000$/, "");
+            return `<div class="bonus-req ${cls}">
+              <span class="mono">${escapeHtml(ts)}</span>
+              <strong>${escapeHtml(r.action || "?")}</strong>
+              ${escapeHtml(r.account || "")}
+              <span class="mono">${escapeHtml(rep)}</span>
+              <span>${r.ok ? "ok" : "fail"}</span>
+            </div>`;
+          })
+          .join("");
+      }
+    }
+  }
+
+  async function refreshHeal() {
+    const res = await fetch("/api/heal/status");
+    const data = await res.json();
+    renderHeal(data);
+    return data;
+  }
+
+  function startHealPolling() {
+    clearInterval(healPollTimer);
+    healPollTimer = setInterval(() => {
+      if (!document.hidden && activeTab === "heal") {
+        refreshHeal().catch(() => {});
+      }
+    }, 500);
+  }
+
+  async function healCrash(slotId) {
+    if (!slotId || healBusy) return;
+    healBusy = true;
+    healSlotSig = ""; // force card redraw
+    const snapshot = await refreshHeal().catch(() => null);
+    const slots = [];
+    Object.values(snapshot?.slots || {}).forEach((rows) => slots.push(...rows));
+    const before = slots.find((s) => s.slot_id === slotId);
+    healUi.focusSlot = slotId;
+    healUi.focusGen = before ? Number(before.generation || 1) : 1;
+    healUi.step = "crash";
+    healUi.crashedAt = Date.now();
+    healUi.message = `Crashing ${slotId}…`;
+    renderHealFlow("crash");
+    const headline = $("#healHeadline");
+    if (headline) headline.textContent = healUi.message;
+
+    try {
+      const res = await fetch("/api/heal/inject/crash", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slot_id: slotId, mode: "stop" }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.ok === false) {
+        healUi.message = `Crash failed: ${data.error || res.status}`;
+        alert(healUi.message);
+        healUi.step = "watch";
+        healUi.focusSlot = null;
+      } else {
+        healUi.message = `Stopped ${slotId}. Healer is replacing it…`;
+        healUi.step = "crash";
+      }
+    } catch (err) {
+      healUi.message = `Crash failed: ${err.message || err}`;
+      alert(healUi.message);
+      healUi.focusSlot = null;
+      healUi.step = "watch";
+    } finally {
+      healBusy = false;
+      healSlotSig = "";
+      await refreshHeal().catch(() => {});
+    }
+  }
+
   function setTab(name) {
     activeTab = name;
     document.querySelectorAll(".tab").forEach((btn) => {
@@ -1188,6 +1758,8 @@
     clearInterval(pollTimer);
     clearInterval(dockerPollTimer);
     clearInterval(labPollTimer);
+    clearInterval(bonusPollTimer);
+    clearInterval(healPollTimer);
 
     if (name === "lab") {
       refreshSnapshot().catch(() => {});
@@ -1198,6 +1770,12 @@
     } else if (name === "experiments") {
       refreshLabStatus().catch(() => {});
       startExperimentsPolling(false);
+    } else if (name === "reshard") {
+      refreshBonusLive().catch(() => {});
+      startBonusPolling();
+    } else if (name === "heal") {
+      refreshHeal().catch(() => {});
+      startHealPolling();
     }
   }
 
@@ -1223,6 +1801,119 @@
   );
   $("#dockerRefreshBtn").addEventListener("click", () => refreshDocker());
   $("#labRefreshBtn")?.addEventListener("click", () => refreshLabStatus());
+
+  $("#bonusTrafficStart")?.addEventListener("click", async () => {
+    await fetch("/api/bonus/traffic/start", { method: "POST" });
+    refreshBonusLive().catch(() => {});
+  });
+  $("#bonusTrafficStop")?.addEventListener("click", async () => {
+    await fetch("/api/bonus/traffic/stop", { method: "POST" });
+    refreshBonusLive().catch(() => {});
+  });
+  $("#bonusClearLogs")?.addEventListener("click", async () => {
+    await fetch("/api/bonus/logs/clear", { method: "POST" });
+    bonusMigLogCount = 0;
+    bonusLogClearedAt = Date.now() / 1000;
+    const stream = $("#bonusReqStream");
+    if (stream) {
+      stream.innerHTML =
+        `<div class="bonus-req-empty">Logs cleared. Start traffic to stream again.</div>`;
+    }
+    const migLog = $("#bonusMigLog");
+    if (migLog) migLog.innerHTML = "";
+    refreshBonusLive().catch(() => {});
+  });
+  $("#bonusResetState")?.addEventListener("click", async () => {
+    const btn = $("#bonusResetState");
+    if (btn) btn.disabled = true;
+    try {
+      await fetch("/api/bonus/traffic/stop", { method: "POST" });
+      const res = await fetch("/api/bonus/reset", { method: "POST" });
+      const data = await res.json();
+      bonusMigLogCount = 0;
+      bonusLogClearedAt = Date.now() / 1000;
+      const stream = $("#bonusReqStream");
+      if (stream) {
+        stream.innerHTML =
+          `<div class="bonus-req-empty">Reset done. B/C restored. Start traffic when ready.</div>`;
+      }
+      const migLog = $("#bonusMigLog");
+      if (migLog) migLog.innerHTML = "";
+      if (!res.ok || data.ok === false) {
+        alert(`Reset failed: ${data.error || res.status}`);
+      }
+      await refreshBonusLive();
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  });
+  $("#bonusMigrateStart")?.addEventListener("click", async () => {
+    bonusMigLogCount = 0;
+    bonusLogClearedAt = 0;
+    await fetch("/api/bonus/migrate/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ force_new: true }),
+    });
+    refreshBonusLive().catch(() => {});
+  });
+  $("#bonusMigrateStop")?.addEventListener("click", async () => {
+    const res = await fetch("/api/bonus/migrate/stop", { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.ok === false) {
+      alert(`Stop failed: ${data.error || res.status}`);
+    }
+    refreshBonusLive().catch(() => {});
+  });
+  $("#bonusMigrateResume")?.addEventListener("click", async () => {
+    bonusMigLogCount = 0;
+    const res = await fetch("/api/bonus/migrate/resume", { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.ok === false) {
+      alert(`Resume failed: ${data.error || res.status}`);
+    }
+    refreshBonusLive().catch(() => {});
+  });
+
+  $("#healTrafficStart")?.addEventListener("click", async () => {
+    await fetch("/api/heal/enable", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled: true }),
+    });
+    await fetch("/api/heal/traffic/start", { method: "POST" });
+    healUi.message = "Traffic started. Crash a replica when ready.";
+    refreshHeal().catch(() => {});
+  });
+  $("#healTrafficStop")?.addEventListener("click", async () => {
+    await fetch("/api/heal/traffic/stop", { method: "POST" });
+    healUi.message = "Traffic stopped.";
+    refreshHeal().catch(() => {});
+  });
+  $("#healDemoCrashA")?.addEventListener("click", async () => {
+    const btn = $("#healDemoCrashA");
+    if (btn) btn.disabled = true;
+    try {
+      await fetch("/api/heal/enable", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: true }),
+      });
+      await fetch("/api/heal/traffic/start", { method: "POST" });
+      healUi.message = "Traffic on — crashing A-0…";
+      await refreshHeal().catch(() => {});
+      await new Promise((r) => setTimeout(r, 1200));
+      await healCrash("A-0");
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  });
+  $("#panel-heal")?.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-heal-crash]");
+    if (!btn || btn.disabled) return;
+    e.preventDefault();
+    healCrash(btn.getAttribute("data-heal-crash"));
+  });
 
   $("#labExpCards")?.addEventListener("click", (e) => {
     const btn = e.target.closest("[data-lab-run]");
@@ -1268,12 +1959,18 @@
       clearInterval(pollTimer);
       clearInterval(dockerPollTimer);
       clearInterval(labPollTimer);
+      clearInterval(bonusPollTimer);
+      clearInterval(healPollTimer);
     } else if (activeTab === "lab") {
       startLabPolling();
     } else if (activeTab === "docker") {
       startDockerPolling();
     } else if (activeTab === "experiments") {
       startExperimentsPolling(false);
+    } else if (activeTab === "reshard") {
+      startBonusPolling();
+    } else if (activeTab === "heal") {
+      startHealPolling();
     }
   });
 })();

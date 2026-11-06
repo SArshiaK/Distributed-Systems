@@ -111,7 +111,7 @@ services:
       SHARD_MAP_PATH: /config/shard_map.json
       FAULT_DIR: /faults
     volumes:
-      - ./config/shard_map.json:/config/shard_map.json:ro
+      - ./config:/config
       - ./experiments/faults:/faults
     ports:
       - "8090:8090"
@@ -131,7 +131,7 @@ services:
       COORDINATOR_URL: http://coordinator:8090
       HEALTH_INTERVAL: "2"
     volumes:
-      - ./config/shard_map.json:/config/shard_map.json:ro
+      - ./config:/config
     ports:
       - "8080:8080"
     depends_on:
@@ -142,26 +142,154 @@ services:
       - coordinator
     restart: "no"
 
+  # ---- Bonus I (opt-in): live re-sharding to Shard C ----
+  db-c:
+    profiles: ["bonus"]
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: bank
+      POSTGRES_PASSWORD: bank
+      POSTGRES_DB: bank
+    command:
+      - postgres
+      - -c
+      - max_prepared_transactions=100
+    volumes:
+      - db-c-data:/var/lib/postgresql/data
+      - ./db/init-c.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bank -d bank"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  bank-c1:
+    profiles: ["bonus"]
+    build: ./bank_server
+    environment:
+      DATABASE_URL: postgresql://bank:bank@db-c:5432/bank
+      REPLICA_ID: C1
+      SHARD_ID: C
+      OWNED_START: "1501"
+      OWNED_END: "2000"
+      WRITES_ENABLED: "false"
+    ports:
+      - "8005:8000"
+    depends_on:
+      db-c:
+        condition: service_healthy
+    restart: "no"
+
+  bank-c2:
+    profiles: ["bonus"]
+    build: ./bank_server
+    environment:
+      DATABASE_URL: postgresql://bank:bank@db-c:5432/bank
+      REPLICA_ID: C2
+      SHARD_ID: C
+      OWNED_START: "1501"
+      OWNED_END: "2000"
+      WRITES_ENABLED: "false"
+    ports:
+      - "8006:8000"
+    depends_on:
+      db-c:
+        condition: service_healthy
+    restart: "no"
+
+  migrator:
+    profiles: ["bonus"]
+    build: ./migrator
+    environment:
+      DATABASE_URL: postgresql://bank:bank@db-coord:5432/coord
+      SHARD_MAP_PATH: /config/shard_map.json
+      GATEWAY_URL: http://gateway:8080
+      COORDINATOR_URL: http://coordinator:8090
+      FAULT_DIR: /faults
+      SOURCE_REPLICAS: http://bank-b1:8000,http://bank-b2:8000
+      TARGET_REPLICAS: http://bank-c1:8000,http://bank-c2:8000
+    volumes:
+      - ./config:/config
+      - ./experiments/faults:/faults
+    ports:
+      - "8095:8095"
+    depends_on:
+      db-coord:
+        condition: service_healthy
+      gateway:
+        condition: service_started
+      coordinator:
+        condition: service_started
+      bank-c1:
+        condition: service_started
+      bank-c2:
+        condition: service_started
+    restart: "no"
+
+  healer:
+    build: ./healer
+    environment:
+      GATEWAY_URL: http://gateway:8080
+      COORDINATOR_URL: http://coordinator:8090
+      SHARD_MAP_PATH: /config/shard_map.json
+      HEALER_STATE_PATH: /config/healer_state.json
+      COMPOSE_PROJECT_NAME: "2"
+      COMPOSE_NETWORK: "2_default"
+      DOCKER_SOCK: /var/run/docker.sock
+      HEALER_ENABLED: "true"
+      HEALER_DESIRED_A: "2"
+      HEALER_DESIRED_B: "2"
+      HEALER_FAIL_THRESHOLD: "2"
+      HEALER_POLL_SECS: "2"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./config:/config
+    ports:
+      - "8096:8096"
+    depends_on:
+      gateway:
+        condition: service_started
+      coordinator:
+        condition: service_started
+      bank-a1:
+        condition: service_started
+      bank-a2:
+        condition: service_started
+      bank-b1:
+        condition: service_started
+      bank-b2:
+        condition: service_started
+    restart: "no"
+
   console:
     build: ./console
     environment:
       GATEWAY_URL: http://gateway:8080
       COORDINATOR_URL: http://coordinator:8090
+      MIGRATOR_URL: http://migrator:8095
+      HEALER_URL: http://healer:8096
       DB_A_URL: postgresql://bank:bank@db-a:5432/bank
       DB_B_URL: postgresql://bank:bank@db-b:5432/bank
+      DB_C_URL: postgresql://bank:bank@db-c:5432/bank
       DB_COORD_URL: postgresql://bank:bank@db-coord:5432/coord
+      BANK_B_ADMIN: http://bank-b1:8000
+      BANK_C_ADMIN: http://bank-c1:8000
+      SHARD_MAP_PATH: /config/shard_map.json
       COMPOSE_PROJECT_NAME: "2"
       DOCKER_SOCK: /var/run/docker.sock
       FAULT_DIR: /faults
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./experiments/faults:/faults
+      - ./config:/config
     ports:
       - "3030:3000"
     depends_on:
       gateway:
         condition: service_started
       coordinator:
+        condition: service_started
+      healer:
         condition: service_started
       db-a:
         condition: service_healthy
@@ -174,4 +302,5 @@ services:
 volumes:
   db-a-data:
   db-b-data:
+  db-c-data:
   db-coord-data:

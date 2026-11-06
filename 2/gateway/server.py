@@ -1,6 +1,7 @@
 """
 Shard-aware gateway.
 Local ops + same-shard transfer locally; cross-shard via Coordinator.
+Bonus I: hot-reload shard map epochs without breaking existing clients.
 """
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ import logging
 import os
 import re
 import threading
+import uuid
 from pathlib import Path
 from typing import Any, Optional
 
@@ -24,6 +26,7 @@ SHARD_MAP_PATH = os.getenv("SHARD_MAP_PATH", "/config/shard_map.json")
 COORDINATOR_URL = os.getenv("COORDINATOR_URL", "http://coordinator:8090")
 HEALTH_INTERVAL = float(os.getenv("HEALTH_INTERVAL", "2"))
 UPSTREAM_TIMEOUT = float(os.getenv("UPSTREAM_TIMEOUT", "10"))
+MAP_RELOAD_INTERVAL = float(os.getenv("MAP_RELOAD_INTERVAL", "1"))
 
 ACCOUNT_RE = re.compile(r"^A(\d{4})$", re.IGNORECASE)
 
@@ -40,36 +43,77 @@ class TransactionRequest(BaseModel):
     account: str
     amount: Optional[Any] = None
     to_account: Optional[str] = None
+    client_request_id: Optional[str] = None
+    epoch: Optional[int] = None
 
 
 class ShardMap:
     def __init__(self, path: str) -> None:
-        raw = json.loads(Path(path).read_text(encoding="utf-8"))
-        self.epoch = int(raw.get("epoch", 1))
-        self.shards: dict[str, dict[str, Any]] = raw["shards"]
-        self._rr: dict[str, int] = {sid: 0 for sid in self.shards}
+        self.path = Path(path)
+        self.epoch = 1
+        self.shards: dict[str, dict[str, Any]] = {}
+        self._rr: dict[str, int] = {}
         self._healthy: dict[str, bool] = {}
-        for shard in self.shards.values():
-            for url in shard["replicas"]:
-                self._healthy[url] = False
+        self._mtime: float = -1.0
         self._lock = threading.Lock()
+        self.reload(force=True)
+
+    def reload(self, force: bool = False) -> bool:
+        try:
+            mtime = self.path.stat().st_mtime
+        except FileNotFoundError:
+            return False
+        with self._lock:
+            if not force and mtime == self._mtime:
+                return False
+            raw = json.loads(self.path.read_text(encoding="utf-8"))
+            new_epoch = int(raw.get("epoch", 1))
+            new_shards = raw["shards"]
+            old_epoch = self.epoch
+            self.epoch = new_epoch
+            self.shards = new_shards
+            self._mtime = mtime
+            for sid in new_shards:
+                self._rr.setdefault(sid, 0)
+            # Drop RR for removed shards
+            for sid in list(self._rr):
+                if sid not in new_shards:
+                    self._rr.pop(sid, None)
+            known = set(self._healthy)
+            current_urls = {u for meta in new_shards.values() for u in meta["replicas"]}
+            for url in current_urls:
+                self._healthy.setdefault(url, False)
+            for url in list(known):
+                if url not in current_urls:
+                    self._healthy.pop(url, None)
+            if force or new_epoch != old_epoch:
+                logger.info(
+                    f"shard_map_loaded  epoch={new_epoch}  shards={list(new_shards)}  "
+                    f"path={self.path}"
+                )
+            return True
 
     def shard_for_account(self, account: str) -> str:
         m = ACCOUNT_RE.match(account.strip())
         if not m:
             raise ValueError("invalid_account")
         num = int(m.group(1))
-        for sid, meta in self.shards.items():
+        with self._lock:
+            shards = dict(self.shards)
+        for sid, meta in shards.items():
             if int(meta["start"]) <= num <= int(meta["end"]):
                 return sid
         raise LookupError("no_shard")
 
     def mark(self, url: str, ok: bool) -> None:
         with self._lock:
-            self._healthy[url] = ok
+            if url in self._healthy:
+                self._healthy[url] = ok
 
     def pick_replica(self, shard_id: str) -> str:
         with self._lock:
+            if shard_id not in self.shards:
+                raise RuntimeError("unknown_shard")
             replicas = list(self.shards[shard_id]["replicas"])
             healthy = [u for u in replicas if self._healthy.get(u)]
             if not healthy:
@@ -99,20 +143,22 @@ _stop = threading.Event()
 
 def _health_loop() -> None:
     while not _stop.is_set():
-        for meta in shard_map.shards.values():
-            for url in meta["replicas"]:
+        shard_map.reload(force=False)
+        with shard_map._lock:
+            urls = [u for meta in shard_map.shards.values() for u in meta["replicas"]]
+        for url in urls:
+            ok = False
+            try:
+                r = requests.get(f"{url.rstrip('/')}/health", timeout=1.5)
+                ok = r.status_code == 200 and r.json().get("status") == "ok"
+            except (requests.RequestException, ValueError, TypeError):
                 ok = False
-                try:
-                    r = requests.get(f"{url.rstrip('/')}/health", timeout=1.5)
-                    ok = r.status_code == 200 and r.json().get("status") == "ok"
-                except (requests.RequestException, ValueError, TypeError):
-                    ok = False
-                prev = shard_map._healthy.get(url)
-                shard_map.mark(url, ok)
-                if prev is True and not ok:
-                    logger.info(f"replica_down  url={url}")
-                elif prev is False and ok:
-                    logger.info(f"replica_up  url={url}")
+            prev = shard_map._healthy.get(url)
+            shard_map.mark(url, ok)
+            if prev is True and not ok:
+                logger.info(f"replica_down  url={url}")
+            elif prev is False and ok:
+                logger.info(f"replica_up  url={url}")
         _stop.wait(HEALTH_INTERVAL)
 
 
@@ -140,7 +186,17 @@ def _forward(replica: str, payload: dict) -> JSONResponse:
         data = {"status": "error", "message": upstream.text}
     if isinstance(data, dict):
         data.setdefault("gateway_replica", replica)
+        data.setdefault("map_epoch", shard_map.epoch)
     return JSONResponse(status_code=upstream.status_code, content=data)
+
+
+def _enrich_payload(body: TransactionRequest) -> dict:
+    payload = body.model_dump()
+    payload["epoch"] = body.epoch if body.epoch is not None else shard_map.epoch
+    if not payload.get("client_request_id"):
+        # Always attach an id so retries/duplicates are safe during Bonus I demos.
+        payload["client_request_id"] = uuid.uuid4().hex
+    return payload
 
 
 app = FastAPI(title="Shard-Aware Banking Gateway")
@@ -162,12 +218,20 @@ def on_shutdown() -> None:
 
 @app.get("/health")
 def health() -> dict:
+    shard_map.reload(force=False)
     return {"status": "ok", "service": "gateway", "epoch": shard_map.epoch}
 
 
 @app.get("/shard-map")
 def get_shard_map() -> dict:
+    shard_map.reload(force=False)
     return shard_map.status()
+
+
+@app.post("/admin/reload-map")
+def reload_map() -> dict:
+    changed = shard_map.reload(force=True)
+    return {"status": "ok", "reloaded": changed, "epoch": shard_map.epoch, "map": shard_map.status()}
 
 
 @app.get("/transactions/{tx_id}")
@@ -183,6 +247,25 @@ def proxy_tx_status(tx_id: str):
             status_code=503,
             content={"status": "error", "message": f"coordinator unreachable: {exc}"},
         )
+
+
+@app.get("/requests/{client_request_id}")
+def proxy_request_status(client_request_id: str):
+    """Uncertain-outcome helper: ask coordinator first, else unknown."""
+    try:
+        r = requests.get(
+            f"{COORDINATOR_URL.rstrip('/')}/requests/{client_request_id}",
+            timeout=UPSTREAM_TIMEOUT,
+        )
+        if r.status_code != 404:
+            return JSONResponse(status_code=r.status_code, content=r.json())
+    except requests.RequestException:
+        pass
+    return {
+        "status": "UNKNOWN",
+        "client_request_id": client_request_id,
+        "message": "no durable client request found yet; retry safely with same id",
+    }
 
 
 @app.post("/transaction")
@@ -202,7 +285,9 @@ def transaction(body: TransactionRequest, request: Request):
             content={"status": "error", "message": "missing account field"},
         )
 
+    shard_map.reload(force=False)
     client = request.client.host if request.client else "?"
+    payload = _enrich_payload(body)
 
     if action == "transfer":
         if not to_account:
@@ -237,14 +322,13 @@ def transaction(body: TransactionRequest, request: Request):
                 )
             logger.info(
                 f"route_same_shard_transfer  ip={client}  from={account}  to={to_account}  "
-                f"shard={from_shard}  replica={replica}"
+                f"shard={from_shard}  replica={replica}  epoch={payload['epoch']}"
             )
-            return _forward(replica, body.model_dump())
+            return _forward(replica, payload)
 
-        # Cross-shard → Coordinator (2PC)
         logger.info(
             f"route_cross_shard_transfer  ip={client}  from={account}  to={to_account}  "
-            f"from_shard={from_shard}  to_shard={to_shard}"
+            f"from_shard={from_shard}  to_shard={to_shard}  epoch={payload['epoch']}"
         )
         try:
             r = requests.post(
@@ -253,6 +337,8 @@ def transaction(body: TransactionRequest, request: Request):
                     "from_account": account,
                     "to_account": to_account,
                     "amount": body.amount,
+                    "client_request_id": payload["client_request_id"],
+                    "epoch": payload["epoch"],
                 },
                 timeout=UPSTREAM_TIMEOUT,
             )
@@ -267,7 +353,6 @@ def transaction(body: TransactionRequest, request: Request):
                 content={"status": "error", "message": f"coordinator unreachable: {exc}"},
             )
 
-    # Local single-account ops
     try:
         shard_id = shard_map.shard_for_account(account)
     except ValueError:
@@ -295,10 +380,9 @@ def transaction(body: TransactionRequest, request: Request):
 
     logger.info(
         f"route  ip={client}  action={action}  account={account}  "
-        f"shard={shard_id}  replica={replica}"
+        f"shard={shard_id}  replica={replica}  epoch={payload['epoch']}"
     )
-    resp = _forward(replica, body.model_dump())
-    return resp
+    return _forward(replica, payload)
 
 
 if __name__ == "__main__":

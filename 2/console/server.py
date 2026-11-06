@@ -18,15 +18,21 @@ from fastapi.staticfiles import StaticFiles
 from psycopg.rows import dict_row
 from pydantic import BaseModel, Field
 
+import bonus_live
 import lab_experiments
 
 HOST = os.getenv("HOST", "0.0.0.0")
 PORT = int(os.getenv("PORT", "3000"))
 GATEWAY_URL = os.getenv("GATEWAY_URL", "http://gateway:8080")
 COORDINATOR_URL = os.getenv("COORDINATOR_URL", "http://coordinator:8090")
+MIGRATOR_URL = os.getenv("MIGRATOR_URL", "http://migrator:8095")
+HEALER_URL = os.getenv("HEALER_URL", "http://healer:8096")
 DB_A_URL = os.getenv("DB_A_URL", "postgresql://bank:bank@db-a:5432/bank")
 DB_B_URL = os.getenv("DB_B_URL", "postgresql://bank:bank@db-b:5432/bank")
+DB_C_URL = os.getenv("DB_C_URL", "postgresql://bank:bank@db-c:5432/bank")
 DB_COORD_URL = os.getenv("DB_COORD_URL", "postgresql://bank:bank@db-coord:5432/coord")
+BANK_B_ADMIN = os.getenv("BANK_B_ADMIN", "http://bank-b1:8000")
+BANK_C_ADMIN = os.getenv("BANK_C_ADMIN", "http://bank-c1:8000")
 WATCH_ACCOUNTS = os.getenv(
     "WATCH_ACCOUNTS",
     "A0100,A0110,A0120,A0200,A0300,A0500,A0600,A0820,A1000,"
@@ -43,6 +49,8 @@ CONTROLLABLE_SERVICES = {
     "bank-a2",
     "bank-b1",
     "bank-b2",
+    "bank-c1",
+    "bank-c2",
     "gateway",
     "coordinator",
 }
@@ -66,6 +74,33 @@ class ContainerActionBody(BaseModel):
 
 class LabRunBody(BaseModel):
     experiment: int = Field(..., description="3 | 6 | 7")
+
+
+class BonusMigrateBody(BaseModel):
+    force_new: bool = True
+
+
+class HealEnableBody(BaseModel):
+    enabled: bool = True
+
+
+class HealCrashBody(BaseModel):
+    slot_id: Optional[str] = None
+    service: Optional[str] = None
+    mode: str = "stop"
+
+
+bonus_live.configure(
+    gateway_url=GATEWAY_URL,
+    coordinator_url=COORDINATOR_URL,
+    migrator_url=MIGRATOR_URL,
+    db_a_url=DB_A_URL,
+    db_b_url=DB_B_URL,
+    db_c_url=DB_C_URL,
+    db_coord_url=DB_COORD_URL,
+    bank_b_admin=BANK_B_ADMIN,
+    bank_c_admin=BANK_C_ADMIN,
+)
 
 
 class UnixHTTPConnection(http.client.HTTPConnection):
@@ -763,6 +798,115 @@ def lab_run(body: LabRunBody):
     if not result.get("ok"):
         return JSONResponse(status_code=409, content=result)
     return result
+
+
+@app.get("/api/bonus/live")
+def bonus_live_snapshot():
+    return bonus_live.snapshot()
+
+
+@app.post("/api/bonus/traffic/start")
+def bonus_traffic_start():
+    return bonus_live.start_traffic()
+
+
+@app.post("/api/bonus/traffic/stop")
+def bonus_traffic_stop():
+    return bonus_live.stop_traffic()
+
+
+@app.post("/api/bonus/migrate/start")
+def bonus_migrate_start(body: BonusMigrateBody = BonusMigrateBody()):
+    result = bonus_live.start_migration(force_new=body.force_new)
+    if result.get("ok") is False:
+        return JSONResponse(status_code=409, content=result)
+    return result
+
+
+@app.post("/api/bonus/migrate/stop")
+def bonus_migrate_stop():
+    result = bonus_live.stop_migration()
+    if result.get("ok") is False:
+        return JSONResponse(status_code=500, content=result)
+    return result
+
+
+@app.post("/api/bonus/migrate/resume")
+def bonus_migrate_resume():
+    result = bonus_live.resume_migration()
+    if result.get("ok") is False:
+        code = 404 if "no open" in str(result.get("error", "")).lower() else 409
+        return JSONResponse(status_code=code, content=result)
+    return result
+
+
+@app.post("/api/bonus/logs/clear")
+def bonus_logs_clear():
+    return bonus_live.clear_logs()
+
+
+@app.post("/api/bonus/reset")
+def bonus_reset():
+    result = bonus_live.reset_demo_state()
+    if not result.get("ok"):
+        return JSONResponse(status_code=500, content=result)
+    return result
+
+
+def _healer_proxy(method: str, path: str, payload: Optional[dict] = None):
+    try:
+        r = requests.request(
+            method,
+            f"{HEALER_URL.rstrip('/')}{path}",
+            json=payload,
+            timeout=20,
+        )
+        try:
+            data = r.json()
+        except ValueError:
+            data = {"ok": False, "error": r.text}
+        if r.status_code >= 400:
+            return JSONResponse(status_code=r.status_code, content=data)
+        return data
+    except requests.RequestException as exc:
+        return JSONResponse(
+            status_code=503,
+            content={"ok": False, "error": f"healer unreachable: {exc}"},
+        )
+
+
+@app.get("/api/heal/status")
+def heal_status():
+    return _healer_proxy("GET", "/status")
+
+
+@app.post("/api/heal/enable")
+def heal_enable(body: HealEnableBody):
+    return _healer_proxy("POST", "/enable", {"enabled": body.enabled})
+
+
+@app.post("/api/heal/traffic/start")
+def heal_traffic_start():
+    return _healer_proxy("POST", "/traffic/start")
+
+
+@app.post("/api/heal/traffic/stop")
+def heal_traffic_stop():
+    return _healer_proxy("POST", "/traffic/stop")
+
+
+@app.post("/api/heal/inject/crash")
+def heal_inject_crash(body: HealCrashBody):
+    return _healer_proxy(
+        "POST",
+        "/inject/crash",
+        {"slot_id": body.slot_id, "service": body.service, "mode": body.mode},
+    )
+
+
+@app.post("/api/heal/reconcile")
+def heal_reconcile():
+    return _healer_proxy("POST", "/reconcile")
 
 
 if __name__ == "__main__":

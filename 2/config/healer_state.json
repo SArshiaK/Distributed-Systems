@@ -1,0 +1,62 @@
+{
+  "enabled": true,
+  "desired": {
+    "A": 2,
+    "B": 2
+  },
+  "slots": {
+    "A": [
+      {
+        "slot_id": "A-0",
+        "shard": "A",
+        "service": null,
+        "dns": "heal-a-0-g9",
+        "url": "http://heal-a-0-g9:8000",
+        "container_name": "2-heal-a-0-g9",
+        "generation": 9,
+        "managed": true,
+        "status": "healthy",
+        "container_running": true
+      },
+      {
+        "slot_id": "A-1",
+        "shard": "A",
+        "service": null,
+        "dns": "heal-a-1-g8",
+        "url": "http://heal-a-1-g8:8000",
+        "container_name": "2-heal-a-1-g8",
+        "generation": 8,
+        "managed": true,
+        "status": "healthy",
+        "container_running": true
+      }
+    ],
+    "B": [
+      {
+        "slot_id": "B-0",
+        "shard": "B",
+        "service": null,
+        "dns": "heal-b-0-g4",
+        "url": "http://heal-b-0-g4:8000",
+        "container_name": "2-heal-b-0-g4",
+        "generation": 4,
+        "managed": true,
+        "status": "healthy",
+        "container_running": true
+      },
+      {
+        "slot_id": "B-1",
+        "shard": "B",
+        "service": null,
+        "dns": "heal-b-1-g5",
+        "url": "http://heal-b-1-g5:8000",
+        "container_name": "2-heal-b-1-g5",
+        "generation": 5,
+        "managed": true,
+        "status": "healthy",
+        "container_running": false
+      }
+    ]
+  },
+  "pending": null
+}
