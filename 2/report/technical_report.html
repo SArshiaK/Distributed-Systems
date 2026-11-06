@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>گزارش فنی · Assignment 2 · Distributed Banking Platform</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Josefin+Sans:wght@300;400;500;600;700&family=Vazirmatn:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      @page {
+        size: A4;
+        margin: 16mm 14mm;
+      }
+
+      :root {
+        --primary: #171717;
+        --secondary: #404040;
+        --accent: #a16207;
+        --bg: #ffffff;
+        --fg: #171717;
+        --muted: #e8ecf0;
+        --muted-fg: #475569;
+        --border: #e5e5e5;
+        --card: #ffffff;
+        --ok: #166534;
+        --a: #1d4ed8;
+        --a-soft: #dbeafe;
+        --b: #7c3aed;
+        --b-soft: #ede9fe;
+        --c: #0f766e;
+        --c-soft: #ccfbf1;
+        --gw: #a16207;
+        --gw-soft: #fef3c7;
+        --coord: #334155;
+        --heal: #b45309;
+        --font-display: "Cinzel", "Vazirmatn", serif;
+        --font-body: "Vazirmatn", "Josefin Sans", sans-serif;
+        --font-en: "Josefin Sans", "Vazirmatn", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        font-size: 11pt;
+      }
+
+      body {
+        margin: 0;
+        background:
+          radial-gradient(circle at top left, rgba(161, 98, 7, 0.06), transparent 36%),
+          linear-gradient(180deg, #fbfaf7 0%, #ffffff 40%, #f7f5f1 100%);
+        color: var(--fg);
+        font-family: var(--font-body);
+        line-height: 1.75;
+      }
+
+      .sheet {
+        max-width: 210mm;
+        margin: 0 auto;
+        padding: 28px 32px 56px;
+        background: var(--bg);
+        box-shadow: 0 18px 50px rgba(23, 23, 23, 0.08);
+      }
+
+      .print-hint {
+        margin-bottom: 1.2rem;
+        padding: 12px 14px;
+        border: 1px solid #bfdbfe;
+        background: #eff6ff;
+        font-size: 0.92rem;
+        color: #1e3a8a;
+      }
+
+      .kicker {
+        margin: 0 0 0.35rem;
+        color: var(--accent);
+        font-family: var(--font-en);
+        font-size: 0.78rem;
+        font-weight: 600;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 0 0 0.45rem;
+        font-family: var(--font-display);
+        font-size: 1.85rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        line-height: 1.25;
+      }
+
+      h2 {
+        margin: 2rem 0 0.65rem;
+        padding-bottom: 0.4rem;
+        border-bottom: 2px solid var(--primary);
+        font-family: var(--font-display);
+        font-size: 1.28rem;
+        font-weight: 600;
+        page-break-after: avoid;
+      }
+
+      h3 {
+        margin: 1.15rem 0 0.4rem;
+        font-family: var(--font-display);
+        font-size: 1.02rem;
+        color: var(--secondary);
+        page-break-after: avoid;
+      }
+
+      p {
+        margin: 0.4rem 0 0.75rem;
+        text-align: justify;
+      }
+
+      .meta {
+        color: var(--muted-fg);
+        font-size: 0.92rem;
+      }
+
+      .lede {
+        max-width: 62ch;
+        margin-top: 0.8rem;
+        font-size: 1.02rem;
+        color: var(--secondary);
+      }
+
+      .toc {
+        margin: 1.4rem 0 0.4rem;
+        padding: 1rem 1.1rem;
+        background: var(--muted);
+        border: 1px solid var(--border);
+      }
+
+      .toc ol {
+        margin: 0.4rem 0 0;
+        padding-right: 1.2rem;
+        columns: 2;
+        column-gap: 1.5rem;
+      }
+
+      .toc a {
+        color: var(--fg);
+        text-decoration: none;
+        border-bottom: 1px solid transparent;
+      }
+
+      .toc a:hover {
+        border-bottom-color: var(--accent);
+      }
+
+      ul,
+      ol {
+        margin: 0.35rem 0 0.85rem;
+        padding-right: 1.25rem;
+      }
+
+      li {
+        margin: 0.28rem 0;
+      }
+
+      code,
+      .mono {
+        font-family: Consolas, "Courier New", monospace;
+        font-size: 0.88em;
+      }
+
+      .callout {
+        margin: 0.9rem 0;
+        padding: 0.85rem 1rem;
+        background: #fffbeb;
+        border-right: 3px solid var(--accent);
+        color: #422006;
+        page-break-inside: avoid;
+      }
+
+      .figure {
+        margin: 1rem 0 1.25rem;
+        padding: 0;
+        border: 1px solid var(--border);
+        background: linear-gradient(180deg, #fcfcfb 0%, #f4f1ea 100%);
+        page-break-inside: avoid;
+        overflow: hidden;
+      }
+
+      .figure-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 12px;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.72);
+      }
+
+      .figure-head strong {
+        font-family: var(--font-display);
+        font-size: 0.92rem;
+      }
+
+      .figure-head span {
+        color: var(--muted-fg);
+        font-family: var(--font-en);
+        font-size: 0.78rem;
+        letter-spacing: 0.04em;
+      }
+
+      .figure svg {
+        display: block;
+        width: 100%;
+        height: auto;
+        background: transparent;
+      }
+
+      .figure-cap {
+        padding: 8px 14px 12px;
+        border-top: 1px solid var(--border);
+        color: var(--muted-fg);
+        font-size: 0.86rem;
+        background: #fff;
+      }
+
+      .seq {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 0.7rem 0 1rem;
+        font-size: 0.9rem;
+        page-break-inside: avoid;
+      }
+
+      .seq th,
+      .seq td {
+        border: 1px solid var(--border);
+        padding: 8px 10px;
+        text-align: right;
+        vertical-align: top;
+      }
+
+      .seq th {
+        background: var(--muted);
+        font-family: var(--font-display);
+        font-weight: 600;
+      }
+
+      .seq td:first-child {
+        width: 2.4rem;
+        text-align: center;
+        font-family: var(--font-en);
+        font-weight: 700;
+        color: var(--accent);
+      }
+
+      .steps {
+        counter-reset: step;
+        list-style: none;
+        padding: 0;
+      }
+
+      .steps li {
+        position: relative;
+        margin: 0.55rem 0;
+        padding: 0.7rem 0.9rem 0.7rem 0.9rem;
+        padding-right: 2.8rem;
+        background: var(--card);
+        border: 1px solid var(--border);
+      }
+
+      .steps li::before {
+        counter-increment: step;
+        content: counter(step);
+        position: absolute;
+        right: 0.7rem;
+        top: 0.75rem;
+        width: 1.45rem;
+        height: 1.45rem;
+        border-radius: 999px;
+        background: var(--primary);
+        color: #fff;
+        font-family: var(--font-en);
+        font-size: 0.78rem;
+        font-weight: 700;
+        line-height: 1.45rem;
+        text-align: center;
+      }
+
+      footer {
+        margin-top: 2.2rem;
+        padding-top: 0.9rem;
+        border-top: 1px solid var(--border);
+        color: var(--muted-fg);
+        font-size: 0.86rem;
+      }
+
+      @media print {
+        body {
+          background: #fff;
+        }
+        .sheet {
+          max-width: none;
+          padding: 0;
+          box-shadow: none;
+        }
+        .print-hint {
+          display: none;
+        }
+        a {
+          color: inherit;
+          text-decoration: none;
+        }
+        .toc ol {
+          columns: 2;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="sheet">
+      <div class="print-hint">
+        چاپ/PDF: <strong>Ctrl+P</strong> → Save as PDF · Background graphics روشن باشد.
+        مسیر فایل: <span class="mono">2/report/technical_report.html</span> (جدا از UI آزمایشگاه)
+      </div>
+
+      <p class="kicker">Distributed Systems · Assignment 2</p>
+      <h1>گزارش فنی پلتفرم بانکداری توزیع‌شده</h1>
+      <p class="meta">معماری مرحله‌به‌مرحله · Sharding · 2PC · Bonus I · Bonus II</p>
+      <p class="lede">
+        این گزارش معماری را از یک مسیر سادهٔ درخواست شروع می‌کند و در هر بخش یک لایهٔ
+        واقعی سیستم را اضافه می‌کند تا در پایان تصویر کامل Gateway، Shard Map، Replica،
+        Coordinator، Migrator و Healer دیده شود.
+      </p>
+
+      <nav class="toc" aria-label="فهرست">
+        <strong>فهرست مطالب</strong>
+        <ol>
+          <li><a href="#s1">مقدمه</a></li>
+          <li><a href="#s2">مرحله ۱ — هسته</a></li>
+          <li><a href="#s3">مرحله ۲ — Sharding</a></li>
+          <li><a href="#s4">مرحله ۳ — Replica و Load Balancing</a></li>
+          <li><a href="#s5">مرحله ۴ — محلی / Cross-Shard</a></li>
+          <li><a href="#s6">مرحله ۵ — 2PC</a></li>
+          <li><a href="#s7">تصمیم ماندگار و Recovery</a></li>
+          <li><a href="#s8">همزمانی و صحت</a></li>
+          <li><a href="#s9">Bonus I — Live Re-Shard</a></li>
+          <li><a href="#s10">Bonus II — Self-Healing</a></li>
+          <li><a href="#s11">محدودیت‌ها و نتایج</a></li>
+        </ol>
+      </nav>
+
+      <section id="s1">
+        <h2>۱. مقدمه و هدف</h2>
+        <p>
+          هدف سیستم، سرویس بانکداری با مقیاس افقی است: حساب‌ها بین چند پایگاه‌داده
+          (shard) پخش می‌شوند، Gateway مسیر را از روی Shard Map پیدا می‌کند، و انتقال
+          بین‌shard با Coordinator و پروتکل Two-Phase Commit انجام می‌شود. استقرار با
+          Docker Compose است و روی سرویس‌های بانکی
+          <span class="mono">restart: "no"</span> گذاشته شده تا بازیابی replica در Bonus
+          II توسط منطق خودمان باشد، نه Swarm/Kubernetes یا restart خودکار Docker.
+        </p>
+      </section>
+
+      <section id="s2">
+        <h2>۲. مرحله ۱ — هستهٔ ساده</h2>
+        <p>
+          در اولین لایه فقط یک مسیر وجود دارد: کلاینت به Gateway می‌رسد، Gateway به یک
+          سرویس بانکی می‌فرستد، و بانک روی Postgres می‌نویسد. هنوز sharding و 2PC نیست؛
+          فقط قرارداد «یک ورودی برای همهٔ درخواست‌ها» ثابت می‌شود.
+        </p>
+
+        <figure class="figure">
+          <div class="figure-head">
+            <strong>شکل ۱ · هستهٔ درخواست</strong>
+            <span>STAGE 01 · CORE PATH</span>
+          </div>
+          <svg viewBox="0 0 840 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Client to Gateway to Bank to DB">
+            <defs>
+              <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0 0 L10 5 L0 10 z" fill="#404040" />
+              </marker>
+            </defs>
+            <rect x="40" y="70" width="140" height="70" fill="#fff" stroke="#171717" stroke-width="2" />
+            <text x="110" y="100" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="16" font-weight="600" fill="#171717">Client</text>
+            <text x="110" y="120" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="11" fill="#475569">HTTP request</text>
+
+            <line x1="180" y1="105" x2="250" y2="105" stroke="#404040" stroke-width="2" marker-end="url(#arr)" />
+
+            <rect x="250" y="60" width="170" height="90" fill="#fef3c7" stroke="#a16207" stroke-width="2.5" />
+            <text x="335" y="95" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="16" font-weight="700" fill="#171717">Gateway</text>
+            <text x="335" y="116" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="11" fill="#475569">single entrypoint</text>
+
+            <line x1="420" y1="105" x2="490" y2="105" stroke="#404040" stroke-width="2" marker-end="url(#arr)" />
+
+            <rect x="490" y="60" width="150" height="90" fill="#fff" stroke="#171717" stroke-width="2" />
+            <text x="565" y="95" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="16" font-weight="600" fill="#171717">Bank App</text>
+            <text x="565" y="116" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="11" fill="#475569">business logic</text>
+
+            <line x1="640" y1="105" x2="700" y2="105" stroke="#404040" stroke-width="2" marker-end="url(#arr)" />
+
+            <rect x="700" y="70" width="100" height="70" fill="#f8fafc" stroke="#171717" stroke-width="2" stroke-dasharray="5 4" />
+            <text x="750" y="110" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="14" font-weight="600" fill="#171717">DB</text>
+          </svg>
+          <figcaption class="figure-cap">
+            عملیات پایه: balance · deposit · withdraw · transfer از یک API واحد.
+          </figcaption>
+        </figure>
+      </section>
+
+      <section id="s3">
+        <h2>۳. مرحله ۲ — Sharding و Shard Map</h2>
+        <p>
+          فضای حساب‌ها با شناسهٔ <span class="mono">Axxxx</span> به بازه‌ها شکسته
+          می‌شود و در <span class="mono">config/shard_map.json</span> ثبت می‌گردد. Gateway
+          با شمارهٔ حساب، shard مالک را پیدا می‌کند. فیلد <span class="mono">epoch</span>
+          نسخهٔ منطقی map است و هنگام مهاجرت زنده افزایش می‌یابد.
+        </p>
+        <ul>
+          <li><strong>Shard A:</strong> ۱–۱۰۰۰ → <span class="mono">db-a</span></li>
+          <li><strong>Shard B:</strong> ۱۰۰۱–۲۰۰۰ → <span class="mono">db-b</span></li>
+          <li><strong>Shard C (بعد از Bonus I):</strong> معمولاً ۱۵۰۱–۲۰۰۰ → <span class="mono">db-c</span></li>
+        </ul>
+
+        <figure class="figure">
+          <div class="figure-head">
+            <strong>شکل ۲ · افزودن Sharding</strong>
+            <span>STAGE 02 · SHARD MAP</span>
+          </div>
+          <svg viewBox="0 0 840 320" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Gateway routes to shard A and B">
+            <defs>
+              <marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0 0 L10 5 L0 10 z" fill="#404040" />
+              </marker>
+            </defs>
+            <rect x="320" y="24" width="200" height="64" fill="#fef3c7" stroke="#a16207" stroke-width="2.5" />
+            <text x="420" y="50" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="16" font-weight="700" fill="#171717">Gateway</text>
+            <text x="420" y="70" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="11" fill="#475569">reads shard_map.json · epoch</text>
+
+            <path d="M380 88 L250 140" fill="none" stroke="#404040" stroke-width="2" marker-end="url(#arr2)" />
+            <path d="M460 88 L590 140" fill="none" stroke="#404040" stroke-width="2" marker-end="url(#arr2)" />
+            <text x="280" y="120" font-family="Josefin Sans, sans-serif" font-size="11" fill="#1d4ed8">A0001–A1000</text>
+            <text x="560" y="120" font-family="Josefin Sans, sans-serif" font-size="11" fill="#7c3aed">A1001–A2000</text>
+
+            <rect x="120" y="148" width="220" height="88" fill="#dbeafe" stroke="#1d4ed8" stroke-width="2.5" />
+            <text x="230" y="185" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="18" font-weight="700" fill="#1d4ed8">Shard A</text>
+            <text x="230" y="208" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="12" fill="#1e3a8a">accounts 1–1000</text>
+
+            <rect x="500" y="148" width="220" height="88" fill="#ede9fe" stroke="#7c3aed" stroke-width="2.5" />
+            <text x="610" y="185" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="18" font-weight="700" fill="#7c3aed">Shard B</text>
+            <text x="610" y="208" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="12" fill="#5b21b6">accounts 1001–2000</text>
+
+            <line x1="230" y1="236" x2="230" y2="268" stroke="#404040" stroke-width="2" marker-end="url(#arr2)" />
+            <line x1="610" y1="236" x2="610" y2="268" stroke="#404040" stroke-width="2" marker-end="url(#arr2)" />
+
+            <rect x="160" y="272" width="140" height="36" fill="#fff" stroke="#1d4ed8" stroke-width="2" stroke-dasharray="5 4" />
+            <text x="230" y="295" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="13" font-weight="600" fill="#1d4ed8">db-a</text>
+
+            <rect x="540" y="272" width="140" height="36" fill="#fff" stroke="#7c3aed" stroke-width="2" stroke-dasharray="5 4" />
+            <text x="610" y="295" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="13" font-weight="600" fill="#7c3aed">db-b</text>
+          </svg>
+          <figcaption class="figure-cap">
+            Shard Map منبع حقیقت مسیریابی است؛ epoch جلوی استفاده از نقشهٔ کهنه را می‌گیرد.
+          </figcaption>
+        </figure>
+      </section>
+
+      <section id="s4">
+        <h2>۴. مرحله ۳ — Replicaها و Load Balancing</h2>
+        <p>
+          هر shard دست‌کم دو نمونهٔ برنامه دارد که به یک دیتابیس مشترک وصل‌اند
+          (مثلاً bank-a1 و bank-a2 روی db-a). Gateway حدود هر ۲ ثانیه
+          <span class="mono">/health</span> را می‌زند و فقط replicaهای سالم را با
+          round-robin انتخاب می‌کند. قطع یک peer، ترافیک را روی سالم نگه می‌دارد—پایهٔ
+          Bonus II.
+        </p>
+
+        <figure class="figure">
+          <div class="figure-head">
+            <strong>شکل ۳ · Replica و Health-aware RR</strong>
+            <span>STAGE 03 · REPLICAS</span>
+          </div>
+          <svg viewBox="0 0 840 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Gateway load balances healthy replicas">
+            <defs>
+              <marker id="arr3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0 0 L10 5 L0 10 z" fill="#404040" />
+              </marker>
+            </defs>
+            <rect x="300" y="18" width="240" height="58" fill="#fef3c7" stroke="#a16207" stroke-width="2.5" />
+            <text x="420" y="42" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="15" font-weight="700" fill="#171717">Gateway</text>
+            <text x="420" y="60" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="11" fill="#475569">health probe · round-robin</text>
+
+            <path d="M360 76 L170 120" fill="none" stroke="#1d4ed8" stroke-width="2" marker-end="url(#arr3)" />
+            <path d="M390 76 L310 120" fill="none" stroke="#1d4ed8" stroke-width="2" marker-end="url(#arr3)" />
+            <path d="M450 76 L530 120" fill="none" stroke="#7c3aed" stroke-width="2" marker-end="url(#arr3)" />
+            <path d="M480 76 L670 120" fill="none" stroke="#7c3aed" stroke-width="2" marker-end="url(#arr3)" />
+
+            <rect x="90" y="128" width="140" height="70" fill="#dbeafe" stroke="#1d4ed8" stroke-width="2" />
+            <text x="160" y="158" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="14" font-weight="700" fill="#1d4ed8">bank-a1</text>
+            <circle cx="120" cy="180" r="5" fill="#166534" />
+            <text x="130" y="184" font-family="Josefin Sans, sans-serif" font-size="11" fill="#166534">healthy</text>
+
+            <rect x="250" y="128" width="140" height="70" fill="#dbeafe" stroke="#1d4ed8" stroke-width="2" />
+            <text x="320" y="158" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="14" font-weight="700" fill="#1d4ed8">bank-a2</text>
+            <circle cx="280" cy="180" r="5" fill="#166534" />
+            <text x="290" y="184" font-family="Josefin Sans, sans-serif" font-size="11" fill="#166534">healthy</text>
+
+            <rect x="470" y="128" width="140" height="70" fill="#ede9fe" stroke="#7c3aed" stroke-width="2" />
+            <text x="540" y="158" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="14" font-weight="700" fill="#7c3aed">bank-b1</text>
+            <circle cx="500" cy="180" r="5" fill="#166534" />
+            <text x="510" y="184" font-family="Josefin Sans, sans-serif" font-size="11" fill="#166534">healthy</text>
+
+            <rect x="630" y="128" width="140" height="70" fill="#ede9fe" stroke="#7c3aed" stroke-width="2" />
+            <text x="700" y="158" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="14" font-weight="700" fill="#7c3aed">bank-b2</text>
+            <circle cx="660" cy="180" r="5" fill="#166534" />
+            <text x="670" y="184" font-family="Josefin Sans, sans-serif" font-size="11" fill="#166534">healthy</text>
+
+            <line x1="230" y1="198" x2="230" y2="235" stroke="#1d4ed8" stroke-width="2" marker-end="url(#arr3)" />
+            <line x1="610" y1="198" x2="610" y2="235" stroke="#7c3aed" stroke-width="2" marker-end="url(#arr3)" />
+
+            <rect x="150" y="242" width="160" height="42" fill="#fff" stroke="#1d4ed8" stroke-width="2" stroke-dasharray="5 4" />
+            <text x="230" y="268" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="13" font-weight="600" fill="#1d4ed8">shared db-a</text>
+
+            <rect x="530" y="242" width="160" height="42" fill="#fff" stroke="#7c3aed" stroke-width="2" stroke-dasharray="5 4" />
+            <text x="610" y="268" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="13" font-weight="600" fill="#7c3aed">shared db-b</text>
+          </svg>
+          <figcaption class="figure-cap">
+            موازنه بار در Gateway است؛ صحت داده به‌خاطر دیتابیس مشترک هر shard حفظ می‌شود.
+          </figcaption>
+        </figure>
+      </section>
+
+      <section id="s5">
+        <h2>۵. مرحله ۴ — تراکنش محلی در برابر Cross-Shard</h2>
+        <p>
+          اگر مبدأ و مقصد transfer در یک shard باشند، Gateway مستقیم به یک replica همان
+          shard می‌فرستد. اگر دو shard متفاوت باشند، درخواست به Coordinator می‌رود تا
+          2PC اجرا شود—Gateway دیگر خودش پول را جابه‌جا نمی‌کند.
+        </p>
+
+        <figure class="figure">
+          <div class="figure-head">
+            <strong>شکل ۴ · دو مسیر اجرا</strong>
+            <span>STAGE 04 · LOCAL VS CROSS</span>
+          </div>
+          <svg viewBox="0 0 840 310" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Same shard vs cross shard paths">
+            <defs>
+              <marker id="arr4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0 0 L10 5 L0 10 z" fill="#404040" />
+              </marker>
+            </defs>
+            <rect x="330" y="16" width="180" height="50" fill="#fff" stroke="#171717" stroke-width="2" />
+            <text x="420" y="47" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="15" font-weight="600">Client</text>
+            <line x1="420" y1="66" x2="420" y2="95" stroke="#404040" stroke-width="2" marker-end="url(#arr4)" />
+
+            <rect x="310" y="98" width="220" height="54" fill="#fef3c7" stroke="#a16207" stroke-width="2.5" />
+            <text x="420" y="130" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="15" font-weight="700">Gateway</text>
+
+            <path d="M340 152 L180 190" fill="none" stroke="#166534" stroke-width="2.5" marker-end="url(#arr4)" />
+            <path d="M500 152 L660 190" fill="none" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#arr4)" />
+            <text x="220" y="178" font-family="Josefin Sans, sans-serif" font-size="12" font-weight="600" fill="#166534">same-shard</text>
+            <text x="580" y="178" font-family="Josefin Sans, sans-serif" font-size="12" font-weight="600" fill="#7c3aed">cross-shard</text>
+
+            <rect x="70" y="198" width="220" height="88" fill="#ecfdf5" stroke="#166534" stroke-width="2" />
+            <text x="180" y="232" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="15" font-weight="700" fill="#166534">Local Bank TX</text>
+            <text x="180" y="255" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="12" fill="#14532d">one shard · one DB transaction</text>
+
+            <rect x="550" y="198" width="220" height="88" fill="#f5f3ff" stroke="#7c3aed" stroke-width="2" />
+            <text x="660" y="232" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="15" font-weight="700" fill="#7c3aed">Coordinator</text>
+            <text x="660" y="255" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="12" fill="#5b21b6">starts 2PC · db-coord</text>
+          </svg>
+          <figcaption class="figure-cap">
+            تفکیک مسیر، پیچیدگی توزیع‌شده را فقط جایی می‌آورد که واقعاً لازم است.
+          </figcaption>
+        </figure>
+      </section>
+
+      <section id="s6">
+        <h2>۶. مرحله ۵ — پروتکل 2PC و توالی پیام‌ها</h2>
+        <p>
+          Coordinator وضعیت را در <span class="mono">db-coord</span> نگه می‌دارد:
+          PREPARING → رأی‌گیری → در صورت موفقیت، ثبت ماندگار
+          <span class="mono">COMMIT_DECIDED</span> → ارسال COMMIT → COMPLETED. اگر رأی
+          منفی یا خطا باشد مسیر ABORT طی می‌شود.
+        </p>
+
+        <figure class="figure">
+          <div class="figure-head">
+            <strong>شکل ۵ · توالی 2PC</strong>
+            <span>STAGE 05 · TWO-PHASE COMMIT</span>
+          </div>
+          <svg viewBox="0 0 840 360" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="2PC sequence between client gateway coordinator and banks">
+            <line x1="90" y1="50" x2="90" y2="340" stroke="#e5e5e5" stroke-width="2" />
+            <line x1="250" y1="50" x2="250" y2="340" stroke="#e5e5e5" stroke-width="2" />
+            <line x1="430" y1="50" x2="430" y2="340" stroke="#e5e5e5" stroke-width="2" />
+            <line x1="610" y1="50" x2="610" y2="340" stroke="#e5e5e5" stroke-width="2" />
+            <line x1="760" y1="50" x2="760" y2="340" stroke="#e5e5e5" stroke-width="2" />
+
+            <text x="90" y="36" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="12" font-weight="700">Client</text>
+            <text x="250" y="36" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="12" font-weight="700" fill="#a16207">Gateway</text>
+            <text x="430" y="36" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="12" font-weight="700" fill="#334155">Coordinator</text>
+            <text x="610" y="36" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="12" font-weight="700" fill="#1d4ed8">Bank A</text>
+            <text x="760" y="36" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="12" font-weight="700" fill="#7c3aed">Bank B</text>
+
+            <defs>
+              <marker id="sarr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M0 0 L10 5 L0 10 z" fill="#171717" />
+              </marker>
+            </defs>
+
+            <line x1="90" y1="70" x2="250" y2="70" stroke="#171717" stroke-width="1.6" marker-end="url(#sarr)" />
+            <text x="170" y="64" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="10">1 transfer</text>
+
+            <line x1="250" y1="100" x2="430" y2="100" stroke="#171717" stroke-width="1.6" marker-end="url(#sarr)" />
+            <text x="340" y="94" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="10">2 start 2PC</text>
+
+            <line x1="430" y1="135" x2="610" y2="135" stroke="#1d4ed8" stroke-width="1.6" marker-end="url(#sarr)" />
+            <line x1="430" y1="155" x2="760" y2="155" stroke="#7c3aed" stroke-width="1.6" marker-end="url(#sarr)" />
+            <text x="520" y="129" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="10" fill="#1d4ed8">3 PREPARE</text>
+
+            <line x1="610" y1="190" x2="430" y2="190" stroke="#1d4ed8" stroke-width="1.6" marker-end="url(#sarr)" />
+            <line x1="760" y1="210" x2="430" y2="210" stroke="#7c3aed" stroke-width="1.6" marker-end="url(#sarr)" />
+            <text x="540" y="184" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="10">4 VOTE YES/NO</text>
+
+            <rect x="340" y="228" width="180" height="28" fill="#fef3c7" stroke="#a16207" stroke-width="1.5" />
+            <text x="430" y="247" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="11" font-weight="700" fill="#a16207">5 COMMIT_DECIDED (durable)</text>
+
+            <line x1="430" y1="280" x2="610" y2="280" stroke="#166534" stroke-width="1.8" marker-end="url(#sarr)" />
+            <line x1="430" y1="300" x2="760" y2="300" stroke="#166534" stroke-width="1.8" marker-end="url(#sarr)" />
+            <text x="520" y="274" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="10" fill="#166534">6 COMMIT</text>
+
+            <line x1="430" y1="330" x2="250" y2="330" stroke="#171717" stroke-width="1.6" marker-end="url(#sarr)" />
+            <line x1="250" y1="348" x2="90" y2="348" stroke="#171717" stroke-width="1.6" marker-end="url(#sarr)" />
+            <text x="170" y="344" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="10">7 result</text>
+          </svg>
+          <figcaption class="figure-cap">
+            تصمیم commit قبل از ارسال COMMIT روی دیسک Coordinator پایدار می‌شود.
+          </figcaption>
+        </figure>
+
+        <table class="seq">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>مسیر</th>
+              <th>عمل</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>1</td>
+              <td>Client → Gateway</td>
+              <td>درخواست transfer بین‌shard</td>
+            </tr>
+            <tr>
+              <td>2</td>
+              <td>Gateway → Coordinator</td>
+              <td>شروع 2PC با client_request_id</td>
+            </tr>
+            <tr>
+              <td>3–4</td>
+              <td>Coordinator ⇄ Banks</td>
+              <td>PREPARE و جمع‌آوری رأی</td>
+            </tr>
+            <tr>
+              <td>5</td>
+              <td>Coordinator / db-coord</td>
+              <td>ثبت ماندگار COMMIT_DECIDED یا ABORT</td>
+            </tr>
+            <tr>
+              <td>6–7</td>
+              <td>Coordinator → Banks → Client</td>
+              <td>اعمال نهایی و پاسخ</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="s7">
+        <h2>۷. تصمیم ماندگار و بازیابی Coordinator</h2>
+        <p>
+          اگر Coordinator بعد از <span class="mono">COMMIT_DECIDED</span> و قبل از ACK
+          همهٔ شرکت‌کننده‌ها کرش کند، هنگام بالا آمدن از وضعیت ماندگار می‌فهمد تصمیم
+          commit بوده و دوباره COMMIT را می‌فرستد تا به COMPLETED برسد—بدون دو بار
+          جابه‌جایی پول. کرش قبل از تصمیم نهایی به مسیر abort/ایمن می‌رود. آزمایش ۶ همین
+          سناریو را نشان می‌دهد.
+        </p>
+      </section>
+
+      <section id="s8">
+        <h2>۸. کنترل همزمانی و صحت</h2>
+        <p>
+          تراکنش‌های محلی با قفل SQL محافظت می‌شوند؛ در 2PC فاز PREPARE منابع را تا تصمیم
+          نهایی نگه می‌دارد. <span class="mono">client_request_id</span> باعث idempotency
+          می‌شود تا retry کلاینت موجودی را دو بار تغییر ندهد. «Preserve transaction
+          correctness» یعنی همین ایمنی منطقی است، نه صف خودکار برای replay همهٔ
+          درخواست‌های fail‌شده هنگام قطع کامل یک shard.
+        </p>
+      </section>
+
+      <section id="s9">
+        <h2>۹. Bonus I — مهاجرت زندهٔ Shard</h2>
+        <p>
+          بازهٔ A1501–A2000 از مالک B به C منتقل می‌شود در حالی که ترافیک ادامه دارد و در
+          هیچ لحظه دو نویسندهٔ همزمان برای یک حساب وجود ندارد.
+        </p>
+        <ol class="steps">
+          <li><strong>PROVISION_TARGET</strong> — بالا آوردن C با نوشتن خاموش</li>
+          <li><strong>SNAPSHOT</strong> — کپی سازگار بازه از B به C</li>
+          <li><strong>CATCHUP</strong> — replay تغییرات از changelog (CDC)</li>
+          <li><strong>FENCE_SOURCE</strong> — فنس کوتاه نوشتن روی بازه در B</li>
+          <li><strong>FINAL_CATCHUP + WAIT_INFLIGHT_2PC</strong> — جمع‌کردن باقی‌مانده و تراکنش‌های باز</li>
+          <li><strong>ACTIVATE_MAP</strong> — epoch جدید، فعال‌سازی C، reload Gateway/Coordinator</li>
+          <li><strong>VERIFY + CLEANUP</strong> — صحت مسیرها و حذف دادهٔ کهنه از B</li>
+        </ol>
+
+        <figure class="figure">
+          <div class="figure-head">
+            <strong>شکل ۶ · معماری پس از مهاجرت</strong>
+            <span>BONUS I · THREE SHARDS</span>
+          </div>
+          <svg viewBox="0 0 840 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Three shards after live migration">
+            <defs>
+              <marker id="arr6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0 0 L10 5 L0 10 z" fill="#404040" />
+              </marker>
+            </defs>
+            <rect x="120" y="20" width="160" height="48" fill="#fef3c7" stroke="#a16207" stroke-width="2" />
+            <text x="200" y="50" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="14" font-weight="700">Gateway</text>
+            <rect x="340" y="20" width="160" height="48" fill="#f1f5f9" stroke="#334155" stroke-width="2" />
+            <text x="420" y="50" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="14" font-weight="700">Coordinator</text>
+            <rect x="560" y="20" width="160" height="48" fill="#fff" stroke="#171717" stroke-width="2" />
+            <text x="640" y="50" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="14" font-weight="700">Migrator</text>
+
+            <line x1="200" y1="68" x2="140" y2="120" stroke="#404040" stroke-width="1.8" marker-end="url(#arr6)" />
+            <line x1="220" y1="68" x2="420" y2="120" stroke="#404040" stroke-width="1.8" marker-end="url(#arr6)" />
+            <line x1="250" y1="68" x2="700" y2="120" stroke="#404040" stroke-width="1.8" marker-end="url(#arr6)" />
+
+            <rect x="40" y="128" width="200" height="90" fill="#dbeafe" stroke="#1d4ed8" stroke-width="2.5" />
+            <text x="140" y="165" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="16" font-weight="700" fill="#1d4ed8">Shard A</text>
+            <text x="140" y="188" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="12" fill="#1e3a8a">1 – 1000</text>
+
+            <rect x="320" y="128" width="200" height="90" fill="#ede9fe" stroke="#7c3aed" stroke-width="2.5" />
+            <text x="420" y="165" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="16" font-weight="700" fill="#7c3aed">Shard B</text>
+            <text x="420" y="188" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="12" fill="#5b21b6">1001 – 1500</text>
+
+            <rect x="600" y="128" width="200" height="90" fill="#ccfbf1" stroke="#0f766e" stroke-width="2.5" />
+            <text x="700" y="165" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="16" font-weight="700" fill="#0f766e">Shard C</text>
+            <text x="700" y="188" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="12" fill="#115e59">1501 – 2000</text>
+
+            <rect x="70" y="240" width="140" height="36" fill="#fff" stroke="#1d4ed8" stroke-width="2" stroke-dasharray="5 4" />
+            <text x="140" y="263" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="13" font-weight="600" fill="#1d4ed8">db-a</text>
+            <rect x="350" y="240" width="140" height="36" fill="#fff" stroke="#7c3aed" stroke-width="2" stroke-dasharray="5 4" />
+            <text x="420" y="263" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="13" font-weight="600" fill="#7c3aed">db-b</text>
+            <rect x="630" y="240" width="140" height="36" fill="#fff" stroke="#0f766e" stroke-width="2" stroke-dasharray="5 4" />
+            <text x="700" y="263" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="13" font-weight="600" fill="#0f766e">db-c</text>
+          </svg>
+          <figcaption class="figure-cap">
+            بعد از ACTIVATE_MAP، epoch جدید مسیر A1501+ را به C می‌فرستد.
+          </figcaption>
+        </figure>
+      </section>
+
+      <section id="s10">
+        <h2>۱۰. Bonus II — Autonomous Self-Healing</h2>
+        <p>
+          سرویس Healer بدون Swarm/K8s و بدون restart policy داکر، تعداد replica سالم را
+          حفظ می‌کند. حلقه حدود هر ۲ ثانیه به <span class="mono">/health</span> هر slot
+          می‌زند؛ دو شکست پیاپی نامزدی جایگزینی می‌سازد. قبل از create، intent در
+          <span class="mono">healer_state.json</span> نوشته می‌شود تا کرش کنترلر باعث
+          duplicate نشود. سپس کانتینر جدید با Docker API ساخته می‌شود، سالم می‌شود، در
+          Shard Map ثبت و به Gateway/Coordinator اعلام می‌گردد؛ در پایان کانتینر خراب حذف
+          می‌شود. peer سالم در تمام مدت به ترافیک پاسخ می‌دهد.
+        </p>
+
+        <figure class="figure">
+          <div class="figure-head">
+            <strong>شکل ۷ · جریان Self-Healing</strong>
+            <span>BONUS II · PROCESS MAP</span>
+          </div>
+          <svg viewBox="0 0 840 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Self healing process stages">
+            <defs>
+              <marker id="arr7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0 0 L10 5 L0 10 z" fill="#a16207" />
+              </marker>
+            </defs>
+            <rect x="20" y="70" width="130" height="70" fill="#fff" stroke="#171717" stroke-width="2" />
+            <text x="85" y="100" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="13" font-weight="700">1 Watch</text>
+            <text x="85" y="118" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="10" fill="#475569">/health · 2s</text>
+
+            <line x1="150" y1="105" x2="185" y2="105" stroke="#a16207" stroke-width="2.2" marker-end="url(#arr7)" />
+
+            <rect x="185" y="70" width="130" height="70" fill="#fef2f2" stroke="#dc2626" stroke-width="2" />
+            <text x="250" y="100" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="13" font-weight="700" fill="#991b1b">2 Detect</text>
+            <text x="250" y="118" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="10" fill="#7f1d1d">fail streak ≥ 2</text>
+
+            <line x1="315" y1="105" x2="350" y2="105" stroke="#a16207" stroke-width="2.2" marker-end="url(#arr7)" />
+
+            <rect x="350" y="70" width="140" height="70" fill="#fffbeb" stroke="#b45309" stroke-width="2" />
+            <text x="420" y="100" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="13" font-weight="700" fill="#92400e">3 Persist</text>
+            <text x="420" y="118" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="10" fill="#78350f">healer_state.json</text>
+
+            <line x1="490" y1="105" x2="525" y2="105" stroke="#a16207" stroke-width="2.2" marker-end="url(#arr7)" />
+
+            <rect x="525" y="70" width="140" height="70" fill="#fff" stroke="#171717" stroke-width="2" />
+            <text x="595" y="100" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="13" font-weight="700">4 Create</text>
+            <text x="595" y="118" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="10" fill="#475569">Docker API · no restart</text>
+
+            <line x1="665" y1="105" x2="700" y2="105" stroke="#a16207" stroke-width="2.2" marker-end="url(#arr7)" />
+
+            <rect x="700" y="70" width="120" height="70" fill="#ecfdf5" stroke="#166534" stroke-width="2" />
+            <text x="760" y="100" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="13" font-weight="700" fill="#166534">5 Register</text>
+            <text x="760" y="118" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="10" fill="#14532d">map + reload</text>
+
+            <text x="420" y="190" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="12" fill="#475569">
+              healthy peer keeps serving traffic during the whole pipeline
+            </text>
+          </svg>
+          <figcaption class="figure-cap">
+            شکل ۸ (معماری نهایی) لایهٔ Healer را روی همان قرارداد Shard Map سوار می‌کند.
+          </figcaption>
+        </figure>
+
+        <figure class="figure">
+          <div class="figure-head">
+            <strong>شکل ۸ · معماری نهایی</strong>
+            <span>FULL SYSTEM</span>
+          </div>
+          <svg viewBox="0 0 840 340" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Full system architecture">
+            <rect x="300" y="16" width="240" height="44" fill="#fff" stroke="#171717" stroke-width="2" />
+            <text x="420" y="44" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="14" font-weight="600">Client / Lab Console</text>
+
+            <line x1="420" y1="60" x2="420" y2="88" stroke="#404040" stroke-width="2" />
+
+            <rect x="40" y="92" width="160" height="52" fill="#fef3c7" stroke="#a16207" stroke-width="2.2" />
+            <text x="120" y="123" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="13" font-weight="700">Gateway</text>
+
+            <rect x="230" y="92" width="160" height="52" fill="#f1f5f9" stroke="#334155" stroke-width="2.2" />
+            <text x="310" y="123" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="13" font-weight="700">Coordinator</text>
+
+            <rect x="420" y="92" width="160" height="52" fill="#fff" stroke="#171717" stroke-width="2.2" />
+            <text x="500" y="123" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="13" font-weight="700">Migrator</text>
+
+            <rect x="610" y="92" width="190" height="52" fill="#fffbeb" stroke="#b45309" stroke-width="2.2" />
+            <text x="705" y="123" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="13" font-weight="700" fill="#92400e">Healer</text>
+
+            <path d="M120 144 L140 190" stroke="#404040" stroke-width="1.6" />
+            <path d="M310 144 L420 190" stroke="#404040" stroke-width="1.6" />
+            <path d="M500 144 L700 190" stroke="#404040" stroke-width="1.6" />
+            <path d="M705 144 L700 190" stroke="#b45309" stroke-width="1.8" stroke-dasharray="4 3" />
+
+            <rect x="40" y="198" width="220" height="70" fill="#dbeafe" stroke="#1d4ed8" stroke-width="2.2" />
+            <text x="150" y="228" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="15" font-weight="700" fill="#1d4ed8">Shard A replicas</text>
+            <text x="150" y="248" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="11" fill="#1e3a8a">heal / bank-a*</text>
+
+            <rect x="310" y="198" width="220" height="70" fill="#ede9fe" stroke="#7c3aed" stroke-width="2.2" />
+            <text x="420" y="228" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="15" font-weight="700" fill="#7c3aed">Shard B replicas</text>
+            <text x="420" y="248" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="11" fill="#5b21b6">heal / bank-b*</text>
+
+            <rect x="580" y="198" width="220" height="70" fill="#ccfbf1" stroke="#0f766e" stroke-width="2.2" />
+            <text x="690" y="228" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="15" font-weight="700" fill="#0f766e">Shard C replicas</text>
+            <text x="690" y="248" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="11" fill="#115e59">bonus migration target</text>
+
+            <rect x="70" y="290" width="160" height="34" fill="#fff" stroke="#1d4ed8" stroke-dasharray="4 3" stroke-width="1.8" />
+            <text x="150" y="312" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="12" font-weight="600" fill="#1d4ed8">db-a</text>
+            <rect x="340" y="290" width="160" height="34" fill="#fff" stroke="#7c3aed" stroke-dasharray="4 3" stroke-width="1.8" />
+            <text x="420" y="312" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="12" font-weight="600" fill="#7c3aed">db-b</text>
+            <rect x="610" y="290" width="160" height="34" fill="#fff" stroke="#0f766e" stroke-dasharray="4 3" stroke-width="1.8" />
+            <text x="690" y="312" text-anchor="middle" font-family="Josefin Sans, sans-serif" font-size="12" font-weight="600" fill="#0f766e">db-c · db-coord</text>
+          </svg>
+          <figcaption class="figure-cap">
+            خط‌چین نارنجی: Healer replica می‌سازد و map را به‌روز می‌کند؛ مسیر ترافیک کلاینت همان Gateway می‌ماند.
+          </figcaption>
+        </figure>
+      </section>
+
+      <section id="s11">
+        <h2>۱۱. محدودیت‌ها و نتایج</h2>
+        <h3>نتایج قابل‌نمایش در دمو</h3>
+        <ul>
+          <li>مسیریابی shard-aware برای عملیات محلی و cross-shard</li>
+          <li>ادامهٔ سرویس با یک replica هنگام توقف peer</li>
+          <li>بازیابی 2PC پس از کرش Coordinator در COMMIT_DECIDED</li>
+          <li>مهاجرت زنده B→C با fence، catchup و epoch جدید</li>
+          <li>جایگزینی خودکار replica و ثبت در Gateway زیر ترافیک</li>
+        </ul>
+        <h3>محدودیت‌ها</h3>
+        <ul>
+          <li>Replicaهای یک shard دیتابیس مشترک دارند.</li>
+          <li>خرابی هم‌زمان همهٔ replicaهای یک shard باعث fail موقت است تا اولین جایگزین بالا بیاید.</li>
+          <li>مهاجرت برای بازه و سناریوی آزمایشگاهی بهینه‌شده است.</li>
+        </ul>
+        <div class="callout">
+          جمع‌بندی: سیستم از یک Gateway ساده به بانک shardشده با 2PC بادوام، مهاجرت
+          آنلاین و کنترلر خودترمیم‌گر می‌رسد؛ هر لایه روی همان قرارداد Shard Map سوار
+          می‌شود.
+        </div>
+      </section>
+
+      <footer>
+        <span class="mono">2/report/technical_report.html</span>
+        · جدا از console UI · مناسب Print → Save as PDF
+        · Design system: Cinzel / Josefin + accent #A16207
+      </footer>
+    </div>
+  </body>
+</html>
