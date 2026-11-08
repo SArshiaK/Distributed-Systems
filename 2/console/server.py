@@ -58,6 +58,19 @@ PROTECTED_SERVICES = {"console"}
 
 STATIC = Path(__file__).parent / "static"
 app = FastAPI(title="Bank Architecture Lab")
+
+
+@app.middleware("http")
+async def disable_static_cache(request, call_next):
+    """Console UI breaks hard when browsers keep a stale app.js/index.html."""
+    response = await call_next(request)
+    path = request.url.path
+    if path == "/" or path.startswith("/assets/"):
+        response.headers["Cache-Control"] = "no-store, max-age=0, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+    return response
+
+
 app.mount("/assets", StaticFiles(directory=STATIC), name="assets")
 
 
@@ -455,7 +468,15 @@ def collect_docker_status() -> dict[str, Any]:
         if isolated and str(state) == "running":
             kind = "isolated"
 
-        controllable = service in CONTROLLABLE_SERVICES
+        managed = str(labels.get("healer.managed", "")).lower() in {"1", "true", "yes"}
+        slot = labels.get("healer.slot") or ""
+        generation = labels.get("healer.generation") or ""
+        # Healer replacements may wrongly inherit compose.service=bank-*; show slot instead.
+        if managed:
+            service = slot or labels.get("healer.shard") or service or "heal"
+        controllable = (service in CONTROLLABLE_SERVICES) or (
+            managed and str(labels.get("healer.shard", "")) in {"A", "B", "C"}
+        )
         containers.append(
             {
                 "id": (c.get("Id") or "")[:12],
@@ -468,12 +489,43 @@ def collect_docker_status() -> dict[str, Any]:
                 "kind": kind,
                 "isolated": isolated,
                 "controllable": controllable,
+                "managed": managed,
+                "slot": slot or None,
+                "generation": generation or None,
                 "ports": _fmt_ports(c.get("Ports")),
                 "created": c.get("Created"),
             }
         )
 
-    containers.sort(key=lambda x: (x.get("service") or x["name"]))
+    # Mark superseded healer containers (older generation still running for same slot).
+    newest_gen: dict[str, int] = {}
+    for item in containers:
+        if not item.get("managed") or not item.get("slot"):
+            continue
+        try:
+            gen = int(item.get("generation") or 0)
+        except ValueError:
+            gen = 0
+        slot_id = str(item["slot"])
+        if gen >= newest_gen.get(slot_id, -1):
+            newest_gen[slot_id] = gen
+    for item in containers:
+        if not item.get("managed") or not item.get("slot"):
+            item["orphan"] = False
+            continue
+        try:
+            gen = int(item.get("generation") or 0)
+        except ValueError:
+            gen = 0
+        item["orphan"] = gen < newest_gen.get(str(item["slot"]), gen)
+
+    # Compose services first, then active heals, orphans last.
+    def _sort_key(x: dict[str, Any]) -> tuple:
+        managed = 1 if x.get("managed") else 0
+        orphan = 1 if x.get("orphan") else 0
+        return (managed, orphan, x.get("service") or x["name"])
+
+    containers.sort(key=_sort_key)
 
     volumes_raw = docker_api(f"/volumes?filters={filters}") or {}
     volumes = []
@@ -538,7 +590,14 @@ def collect_docker_status() -> dict[str, Any]:
 
 @app.get("/")
 def index():
-    return FileResponse(STATIC / "index.html")
+    return FileResponse(
+        STATIC / "index.html",
+        media_type="text/html",
+        headers={
+            "Cache-Control": "no-store, max-age=0, must-revalidate",
+            "Pragma": "no-cache",
+        },
+    )
 
 
 @app.get("/api/health")

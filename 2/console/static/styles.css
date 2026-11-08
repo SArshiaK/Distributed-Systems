@@ -172,18 +172,33 @@ button {
 .tabs {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-1);
+  gap: 6px;
   margin-top: var(--space-1);
+}
+
+body[data-tab]:not([data-tab="lab"]) .hero > p:not(.hero-kicker) {
+  display: none !important;
+}
+
+body[data-tab]:not([data-tab="lab"]) .hero h1 {
+  font-size: clamp(1.45rem, 2.8vw, 1.9rem);
+  margin: 4px 0 8px;
+}
+
+body[data-tab="docker"] .hero {
+  margin-bottom: 8px;
+  padding-bottom: 8px;
 }
 
 .tab {
   border: 1px solid var(--color-border);
   background: transparent;
   color: var(--color-muted-foreground);
-  padding: 10px 16px;
-  min-height: 40px;
+  padding: 8px 12px;
+  min-height: 36px;
   border-radius: var(--radius);
   letter-spacing: 0.04em;
+  font-size: 0.88rem;
   transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
 }
 
@@ -268,7 +283,61 @@ button {
 }
 
 .docker-table {
-  min-width: 760px;
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.docker-table th:nth-child(1),
+.docker-table td:nth-child(1) {
+  width: 18%;
+}
+
+.docker-table th:nth-child(2),
+.docker-table td:nth-child(2) {
+  width: 22%;
+  word-break: break-all;
+}
+
+.docker-table th:nth-child(3),
+.docker-table td:nth-child(3) {
+  width: 12%;
+}
+
+.docker-table th:nth-child(4),
+.docker-table td:nth-child(4) {
+  width: 18%;
+}
+
+.docker-table th:nth-child(5),
+.docker-table td:nth-child(5) {
+  width: 14%;
+  word-break: break-all;
+}
+
+.docker-table th:nth-child(6),
+.docker-table td:nth-child(6) {
+  width: 16%;
+}
+
+.docker-table thead th {
+  position: sticky;
+  top: 0;
+  background: #fff;
+  z-index: 1;
+}
+
+#panel-docker .table-scroll {
+  max-height: min(62vh, 640px);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 0 8px;
+  background: #fff;
+}
+
+tr.docker-orphan td {
+  opacity: 0.72;
+  background: rgba(161, 98, 7, 0.05);
 }
 
 .action-row {

@@ -421,6 +421,8 @@ def create_replacement(slot: dict, generation: int) -> dict:
     env = _env_with_replica(tmpl["env"], replica_id, shard)
     labels = {
         "com.docker.compose.project": COMPOSE_PROJECT,
+        # Distinct from real compose services so Docker Status / controls stay clear.
+        "com.docker.compose.service": f"heal-{slot_id.lower()}",
         "healer.managed": "true",
         "healer.slot": slot_id,
         "healer.shard": shard,

@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Bank Architecture Lab</title>
-    <link rel="stylesheet" href="/assets/styles.css" />
+    <link rel="stylesheet" href="/assets/styles.css?v=20261108f" />
   </head>
   <body>
     <main class="page">
@@ -656,6 +656,7 @@
         </div>
 
         <div class="status-row" id="dockerCounts" aria-live="polite"></div>
+        <div class="live hidden" id="dockerError" role="alert" style="margin-bottom: 12px"></div>
 
         <div class="panel docker-panel">
           <div class="docker-panel-head">
@@ -664,10 +665,7 @@
           </div>
           <div class="table-scroll">
             <p class="docker-hint">
-              Controllable services: bank replicas, gateway, coordinator.
-              <strong>Stop</strong> kills the container;
-              <strong>Isolate</strong> keeps it running but disconnects it from the compose network
-              (Gateway health checks will fail).
+              <strong>Stop</strong> kills · <strong>Isolate</strong> disconnects from the compose network.
             </p>
             <table class="docker-table">
               <thead>
@@ -717,12 +715,11 @@
           </div>
         </div>
 
-        <div class="live hidden" id="dockerError" role="alert"></div>
       </section>
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/MotionPathPlugin.min.js"></script>
-    <script src="/assets/app.js"></script>
+    <script src="/assets/app.js?v=20261108f"></script>
   </body>
 </html>

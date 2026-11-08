@@ -34,6 +34,25 @@ UPSTREAM_TIMEOUT = float(os.getenv("UPSTREAM_TIMEOUT", "5"))
 RECOVERY_INTERVAL = float(os.getenv("RECOVERY_INTERVAL", "3"))
 FAULT_DIR = Path(os.getenv("FAULT_DIR", "/faults"))
 
+# Used when recovering COMMIT/ABORT after the live map dropped a shard (e.g. reset to A+B).
+_FALLBACK_REPLICAS: dict[str, list[str]] = {
+    "A": [
+        u.strip()
+        for u in os.getenv("FALLBACK_A", "http://bank-a1:8000,http://bank-a2:8000").split(",")
+        if u.strip()
+    ],
+    "B": [
+        u.strip()
+        for u in os.getenv("FALLBACK_B", "http://bank-b1:8000,http://bank-b2:8000").split(",")
+        if u.strip()
+    ],
+    "C": [
+        u.strip()
+        for u in os.getenv("FALLBACK_C", "http://bank-c1:8000,http://bank-c2:8000").split(",")
+        if u.strip()
+    ],
+}
+
 ACCOUNT_RE = re.compile(r"^A(\d{4})$", re.IGNORECASE)
 TERMINAL = {"COMPLETED"}
 NEEDS_RECOVERY = {
@@ -150,13 +169,18 @@ def mark(url: str, ok: bool) -> None:
 
 def pick_replica(shard_id: str) -> str:
     with _lock:
-        replicas = list(_shards[shard_id]["replicas"])
+        meta = _shards.get(shard_id)
+        replicas = list((meta or {}).get("replicas") or [])
+        if not replicas:
+            replicas = list(_FALLBACK_REPLICAS.get(shard_id) or [])
         healthy = [u for u in replicas if _healthy.get(u)]
-        if not healthy:
-            raise RuntimeError(f"no healthy replica for shard {shard_id}")
-        idx = _rr[shard_id] % len(healthy)
+        candidates = healthy or replicas
+        if not candidates:
+            raise RuntimeError(f"no replica for shard {shard_id}")
+        _rr.setdefault(shard_id, 0)
+        idx = _rr[shard_id] % len(candidates)
         _rr[shard_id] += 1
-        return healthy[idx]
+        return candidates[idx]
 
 
 def parse_amount(raw: Any) -> Decimal:

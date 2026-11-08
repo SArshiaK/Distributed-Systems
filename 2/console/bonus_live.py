@@ -13,7 +13,12 @@ from typing import Any, Optional
 
 import psycopg
 import requests
+from psycopg import sql
 from psycopg.rows import dict_row
+
+# Keep bonus UI snappy even if a shard DB is lock-stuck (e.g. orphan PREPARE TRANSACTION).
+_DB_CONNECT_TIMEOUT = 2
+_DB_STATEMENT_TIMEOUT_MS = 2500
 
 GATEWAY_URL = "http://gateway:8080"
 COORDINATOR_URL = "http://coordinator:8090"
@@ -222,9 +227,20 @@ def traffic_status() -> dict:
         }
 
 
+def _connect(url: str, *, autocommit: bool = False):
+    conn = psycopg.connect(
+        url,
+        row_factory=dict_row,
+        connect_timeout=_DB_CONNECT_TIMEOUT,
+        options=f"-c statement_timeout={_DB_STATEMENT_TIMEOUT_MS}",
+    )
+    conn.autocommit = autocommit
+    return conn
+
+
 def _fetch_accounts(url: str, ids: list[str]) -> dict[str, Any]:
     try:
-        with psycopg.connect(url, row_factory=dict_row, connect_timeout=2) as conn:
+        with _connect(url) as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     "SELECT account_id, balance FROM accounts "
@@ -334,7 +350,7 @@ def _migrator_status() -> dict:
 
 def _inflight_2pc() -> list[dict]:
     try:
-        with psycopg.connect(DB_COORD_URL, row_factory=dict_row, connect_timeout=2) as conn:
+        with _connect(DB_COORD_URL) as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     """
@@ -382,7 +398,7 @@ def _inflight_2pc() -> list[dict]:
 
 def _recent_2pc() -> list[dict]:
     try:
-        with psycopg.connect(DB_COORD_URL, row_factory=dict_row, connect_timeout=2) as conn:
+        with _connect(DB_COORD_URL) as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     """
@@ -507,10 +523,33 @@ def _write_initial_shard_map() -> None:
             pass
 
 
-def _exec_sql(url: str, sql: str) -> None:
-    with psycopg.connect(url) as conn:
+def _resolve_prepared_xacts(url: str) -> list[str]:
+    """Orphan PREPARE TRANSACTION rows block TRUNCATE and freeze the Live Re-Shard UI."""
+    cleared: list[str] = []
+    with psycopg.connect(url, connect_timeout=3, autocommit=True) as conn:
         with conn.cursor() as cur:
-            cur.execute(sql)
+            cur.execute("SELECT gid FROM pg_prepared_xacts")
+            gids = [row[0] for row in cur.fetchall()]
+            for gid in gids:
+                try:
+                    cur.execute(
+                        sql.SQL("ROLLBACK PREPARED {}").format(sql.Literal(gid))
+                    )
+                    cleared.append(str(gid))
+                except Exception as exc:  # noqa: BLE001
+                    cleared.append(f"{gid}!{exc}")
+    return cleared
+
+
+def _exec_sql(url: str, statement: str) -> None:
+    # Demo reset must not hang forever behind locks / prepared xacts.
+    with psycopg.connect(
+        url,
+        connect_timeout=3,
+        options="-c statement_timeout=15000 -c lock_timeout=8000",
+    ) as conn:
+        with conn.cursor() as cur:
+            cur.execute(statement)
         conn.commit()
 
 
@@ -545,6 +584,15 @@ def reset_demo_state() -> dict:
             requests.post(f"{base}/admin/reload-map", timeout=5)
         except requests.RequestException as exc:
             notes.append(f"reload {base}: {exc}")
+
+    # Prepared 2PC leftovers hold relation locks → TRUNCATE + UI SELECTs queue forever.
+    for label, db_url in (("A", DB_A_URL), ("B", DB_B_URL), ("C", DB_C_URL)):
+        try:
+            cleared = _resolve_prepared_xacts(db_url)
+            if cleared:
+                notes.append(f"DB {label}: rolled back prepared {cleared}")
+        except Exception as exc:  # noqa: BLE001
+            notes.append(f"DB {label}: prepared cleanup failed: {exc}")
 
     # Wipe CDC / request noise on A (balances stay — A is not in the migrate range).
     try:

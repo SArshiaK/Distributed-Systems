@@ -5,16 +5,16 @@
       "start": 1,
       "end": 1000,
       "replicas": [
-        "http://heal-a-0-g10:8000",
-        "http://heal-a-1-g9:8000"
+        "http://bank-a1:8000",
+        "http://bank-a2:8000"
       ]
     },
     "B": {
       "start": 1001,
       "end": 2000,
       "replicas": [
-        "http://heal-b-0-g5:8000",
-        "http://heal-b-1-g6:8000"
+        "http://bank-b1:8000",
+        "http://bank-b2:8000"
       ]
     }
   }

@@ -635,11 +635,11 @@
   }
 
   function escapeHtml(value) {
-    return String(value ?? "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;");
+    return String(value == null ? "" : value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
   }
 
   function controlButtons(item) {
@@ -713,90 +713,163 @@
     const sub = $("#dockerSub");
     const counts = $("#dockerCounts");
     const updated = $("#dockerUpdated");
-
-    if (!data?.ok) {
-      err.classList.remove("hidden");
-      err.textContent = `Docker status unavailable · ${data?.error || "unknown error"}${
-        data?.hint ? ` · ${data.hint}` : ""
-      }`;
-      counts.innerHTML = "";
-      return;
-    }
-
-    err.classList.add("hidden");
-    err.textContent = "";
-    sub.textContent = `Project “${data.project}” · network ${data.network || "—"} · live compose resources.`;
-    updated.textContent = `Updated ${new Date().toLocaleTimeString()}`;
-
-    const c = data.counts || {};
-    counts.innerHTML = `
-      <span class="pill"><span class="dot" aria-hidden="true"></span>Total ${c.total ?? 0}</span>
-      <span class="pill ok"><span class="dot" aria-hidden="true"></span>Running ${c.running ?? 0}</span>
-      <span class="pill ok"><span class="dot" aria-hidden="true"></span>Healthy ${c.healthy ?? 0}</span>
-      <span class="pill ${c.isolated ? "bad" : ""}"><span class="dot" aria-hidden="true"></span>Isolated ${
-        c.isolated ?? 0
-      }</span>
-      <span class="pill ${c.exited ? "bad" : ""}"><span class="dot" aria-hidden="true"></span>Exited ${
-        c.exited ?? 0
-      }</span>
-    `;
-
     const tbody = $("#dockerContainers");
-    if (!data.containers?.length) {
-      tbody.innerHTML = `<tr><td colspan="6">No containers found for this project.</td></tr>`;
-    } else {
-      tbody.innerHTML = data.containers
-        .map((item) => {
-          const kind = item.kind || item.state || "unknown";
-          const ports = (item.ports || []).join(", ") || "—";
-          const statusExtra = item.isolated ? `${item.status || ""} · network isolated` : item.status || "—";
-          return `<tr>
-            <td><strong>${escapeHtml(item.service || "—")}</strong></td>
-            <td class="mono">${escapeHtml(item.name)}</td>
-            <td><span class="state-badge ${escapeHtml(kind)}">${escapeHtml(kind)}</span></td>
-            <td>${escapeHtml(statusExtra)}</td>
-            <td class="mono">${escapeHtml(ports)}</td>
-            <td>${controlButtons(item)}</td>
-          </tr>`;
-        })
-        .join("");
-    }
-
     const volBody = $("#dockerVolumes");
-    if (!data.volumes?.length) {
-      volBody.innerHTML = `<tr><td colspan="2">No volumes.</td></tr>`;
-    } else {
-      volBody.innerHTML = data.volumes
-        .map(
-          (v) => `<tr>
-            <td class="mono">${escapeHtml(v.name)}</td>
-            <td>${escapeHtml(v.driver || "—")}</td>
-          </tr>`
-        )
-        .join("");
-    }
-
     const netBody = $("#dockerNetworks");
-    if (!data.networks?.length) {
-      netBody.innerHTML = `<tr><td colspan="3">No networks.</td></tr>`;
-    } else {
-      netBody.innerHTML = data.networks
-        .map(
-          (n) => `<tr>
-            <td class="mono">${escapeHtml(n.name)}</td>
-            <td>${escapeHtml(n.driver || "—")}</td>
-            <td>${escapeHtml(n.scope || "—")}</td>
-          </tr>`
-        )
-        .join("");
+
+    try {
+      if (!data || data.ok === false) {
+        const msg = `Docker status unavailable · ${(data && data.error) || "unknown error"}${
+          data && data.hint ? ` · ${data.hint}` : ""
+        }`;
+        if (err) {
+          err.classList.remove("hidden");
+          err.textContent = msg;
+        }
+        if (counts) {
+          counts.innerHTML = `<span class="pill bad"><span class="dot" aria-hidden="true"></span>Error</span>`;
+        }
+        if (updated) updated.textContent = "Failed";
+        if (tbody) {
+          tbody.innerHTML = `<tr><td colspan="6">${escapeHtml(msg)}</td></tr>`;
+        }
+        return;
+      }
+
+      if (err) {
+        err.classList.add("hidden");
+        err.textContent = "";
+      }
+      if (sub) {
+        sub.textContent = `Project “${data.project || "?"}” · network ${
+          data.network || "—"
+        } · live compose resources.`;
+      }
+      if (updated) updated.textContent = `Updated ${new Date().toLocaleTimeString()}`;
+
+      const c = data.counts || {};
+      if (counts) {
+        counts.innerHTML = `
+          <span class="pill"><span class="dot" aria-hidden="true"></span>Total ${c.total ?? 0}</span>
+          <span class="pill ok"><span class="dot" aria-hidden="true"></span>Running ${c.running ?? 0}</span>
+          <span class="pill ok"><span class="dot" aria-hidden="true"></span>Healthy ${c.healthy ?? 0}</span>
+          <span class="pill ${c.isolated ? "bad" : ""}"><span class="dot" aria-hidden="true"></span>Isolated ${
+            c.isolated ?? 0
+          }</span>
+          <span class="pill ${c.exited ? "bad" : ""}"><span class="dot" aria-hidden="true"></span>Exited ${
+            c.exited ?? 0
+          }</span>
+        `;
+      }
+
+      const containers = Array.isArray(data.containers) ? data.containers : [];
+      if (tbody) {
+        if (!containers.length) {
+          tbody.innerHTML = `<tr><td colspan="6">No containers found for this project.</td></tr>`;
+        } else {
+          tbody.innerHTML = containers
+            .map((item) => {
+              const kind = item.kind || item.state || "unknown";
+              const portList = Array.isArray(item.ports) ? item.ports : [];
+              const ports = portList.join(", ") || "—";
+              const statusExtra = item.isolated
+                ? `${item.status || ""} · network isolated`
+                : item.status || "—";
+              let serviceLabel = item.service || "—";
+              if (item.managed) {
+                serviceLabel = item.orphan
+                  ? `${item.service || "heal"} · orphan heal`
+                  : `${item.service || "heal"} · heal`;
+              }
+              const rowClass = item.orphan ? " class=\"docker-orphan\"" : "";
+              return `<tr${rowClass}>
+                <td><strong>${escapeHtml(serviceLabel)}</strong></td>
+                <td class="mono">${escapeHtml(item.name)}</td>
+                <td><span class="state-badge ${escapeHtml(kind)}">${escapeHtml(kind)}</span></td>
+                <td>${escapeHtml(statusExtra)}</td>
+                <td class="mono">${escapeHtml(ports)}</td>
+                <td>${controlButtons(item)}</td>
+              </tr>`;
+            })
+            .join("");
+        }
+      }
+
+      const volumes = Array.isArray(data.volumes) ? data.volumes : [];
+      if (volBody) {
+        volBody.innerHTML = volumes.length
+          ? volumes
+              .map(
+                (v) => `<tr>
+                  <td class="mono">${escapeHtml(v.name)}</td>
+                  <td>${escapeHtml(v.driver || "—")}</td>
+                </tr>`
+              )
+              .join("")
+          : `<tr><td colspan="2">No volumes.</td></tr>`;
+      }
+
+      const networks = Array.isArray(data.networks) ? data.networks : [];
+      if (netBody) {
+        netBody.innerHTML = networks.length
+          ? networks
+              .map(
+                (n) => `<tr>
+                  <td class="mono">${escapeHtml(n.name)}</td>
+                  <td>${escapeHtml(n.driver || "—")}</td>
+                  <td>${escapeHtml(n.scope || "—")}</td>
+                </tr>`
+              )
+              .join("")
+          : `<tr><td colspan="3">No networks.</td></tr>`;
+      }
+    } catch (e) {
+      if (err) {
+        err.classList.remove("hidden");
+        err.textContent = `Docker render failed · ${e.message || e}`;
+      }
+      if (tbody) {
+        tbody.innerHTML = `<tr><td colspan="6">Render error: ${escapeHtml(
+          e.message || e
+        )}</td></tr>`;
+      }
     }
   }
 
   async function refreshDocker() {
-    const res = await fetch("/api/docker");
-    const data = await res.json();
-    renderDocker(data);
-    return data;
+    const updated = $("#dockerUpdated");
+    const tbody = $("#dockerContainers");
+    const err = $("#dockerError");
+    const hasRows = !!(tbody && tbody.querySelector("tr td strong"));
+    if (updated) updated.textContent = hasRows ? "Refreshing…" : "Loading…";
+    if (tbody && !tbody.children.length) {
+      tbody.innerHTML = `<tr><td colspan="6">Loading containers…</td></tr>`;
+    }
+    try {
+      const res = await fetch("/api/docker", { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok && data && data.ok !== true) {
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      renderDocker(data);
+      return data;
+    } catch (e) {
+      // Keep the last good table during transient poll/network blips.
+      if (hasRows) {
+        if (err) {
+          err.classList.remove("hidden");
+          err.textContent = `Refresh failed · ${e.message || e} (showing last data)`;
+        }
+        if (updated) updated.textContent = "Refresh failed";
+        return null;
+      }
+      renderDocker({
+        ok: false,
+        error: e.message || String(e),
+        hint: "Check that console has /var/run/docker.sock mounted.",
+      });
+      throw e;
+    }
   }
 
   function startLabPolling() {
@@ -1743,6 +1816,7 @@
 
   function setTab(name) {
     activeTab = name;
+    document.body.dataset.tab = name;
     document.querySelectorAll(".tab").forEach((btn) => {
       const on = btn.dataset.tab === name;
       btn.classList.toggle("active", on);
@@ -1765,7 +1839,17 @@
       refreshSnapshot().catch(() => {});
       startLabPolling();
     } else if (name === "docker") {
-      refreshDocker().catch(() => {});
+      const focusDocker = () => {
+        const el = $("#panel-docker .docker-panel") || $("#dockerCounts");
+        el?.scrollIntoView({ behavior: "instant", block: "start" });
+      };
+      focusDocker();
+      refreshDocker()
+        .catch(() => {})
+        .finally(() => {
+          requestAnimationFrame(focusDocker);
+          setTimeout(focusDocker, 50);
+        });
       startDockerPolling();
     } else if (name === "experiments") {
       refreshLabStatus().catch(() => {});
@@ -1799,7 +1883,7 @@
   $("#refreshBtn").addEventListener("click", () =>
     refreshSnapshot().then(() => setLive("Snapshot refreshed."))
   );
-  $("#dockerRefreshBtn").addEventListener("click", () => refreshDocker());
+  // dockerRefreshBtn bound below with optional chaining
   $("#labRefreshBtn")?.addEventListener("click", () => refreshLabStatus());
 
   $("#bonusTrafficStart")?.addEventListener("click", async () => {
@@ -1921,7 +2005,7 @@
     runLabExperiment(btn.getAttribute("data-lab-run"));
   });
 
-  $("#dockerContainers").addEventListener("click", (e) => {
+  $("#dockerContainers")?.addEventListener("click", (e) => {
     const btn = e.target.closest("[data-docker-action]");
     if (!btn) return;
     const action = btn.getAttribute("data-docker-action");
@@ -1929,6 +2013,9 @@
     const name = btn.getAttribute("data-name") || id;
     if (!action || !id) return;
     runDockerAction(id, action, name);
+  });
+  $("#dockerRefreshBtn")?.addEventListener("click", () => {
+    refreshDocker().catch(() => {});
   });
 
   document.querySelectorAll("[data-preset]").forEach((btn) => {
