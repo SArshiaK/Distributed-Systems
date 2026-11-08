@@ -116,6 +116,37 @@ def get_status() -> dict[str, Any]:
         }
 
 
+def clear_live() -> dict[str, Any]:
+    """Clear Live requests / timeline / proof so the next demo starts on a clean board."""
+    global _req_seq
+    with _lock:
+        if _state["running"]:
+            return {
+                "ok": False,
+                "error": "experiment is running — wait for it to finish, then clear",
+            }
+        _req_seq = 0
+        _state.update(
+            {
+                "running": False,
+                "experiment": None,
+                "title": None,
+                "passed": None,
+                "error": None,
+                "started_at": None,
+                "finished_at": None,
+                "headline": "Pick an experiment to demonstrate.",
+                "steps": [],
+                "requests": [],
+                "phases": [],
+                "metrics": {},
+                "proof": {},
+                "result": {},
+            }
+        )
+    return {"ok": True, "cleared": True}
+
+
 def _reset(experiment: int, title: str) -> None:
     global _req_seq
     _req_seq = 0

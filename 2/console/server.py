@@ -859,6 +859,14 @@ def lab_run(body: LabRunBody):
     return result
 
 
+@app.post("/api/lab/clear")
+def lab_clear():
+    result = lab_experiments.clear_live()
+    if not result.get("ok"):
+        return JSONResponse(status_code=409, content=result)
+    return result
+
+
 @app.get("/api/bonus/live")
 def bonus_live_snapshot():
     return bonus_live.snapshot()

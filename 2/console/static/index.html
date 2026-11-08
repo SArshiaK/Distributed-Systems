@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Bank Architecture Lab</title>
-    <link rel="stylesheet" href="/assets/styles.css?v=20261108f" />
+    <link rel="stylesheet" href="/assets/styles.css?v=20261108g" />
   </head>
   <body>
     <main class="page">
@@ -306,6 +306,7 @@
             </p>
           </div>
           <div class="btn-row">
+            <button class="btn btn-ghost" type="button" id="labClearBtn">Clear live board</button>
             <button class="btn btn-ghost" type="button" id="labRefreshBtn">Refresh</button>
           </div>
         </div>
@@ -389,7 +390,12 @@
           <div class="panel docker-panel">
             <div class="docker-panel-head">
               <h2>Live requests</h2>
-              <span class="muted-note" id="labReqMeta">0 rows</span>
+              <div class="btn-row">
+                <span class="muted-note" id="labReqMeta">0 rows</span>
+                <button class="btn btn-ghost btn-tiny" type="button" id="labClearReqBtn">
+                  Clear
+                </button>
+              </div>
             </div>
             <div class="table-scroll">
               <table class="docker-table lab-req-table">
@@ -720,6 +726,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/MotionPathPlugin.min.js"></script>
-    <script src="/assets/app.js?v=20261108f"></script>
+    <script src="/assets/app.js?v=20261108g"></script>
   </body>
 </html>

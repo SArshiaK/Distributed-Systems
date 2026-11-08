@@ -10,10 +10,10 @@
         "slot_id": "A-0",
         "shard": "A",
         "service": null,
-        "dns": "heal-a-0-g10",
-        "url": "http://heal-a-0-g10:8000",
-        "container_name": "2-heal-a-0-g10",
-        "generation": 10,
+        "dns": "heal-a-0-g11",
+        "url": "http://heal-a-0-g11:8000",
+        "container_name": "2-heal-a-0-g11",
+        "generation": 11,
         "managed": true,
         "status": "healthy",
         "container_running": true
@@ -22,13 +22,13 @@
         "slot_id": "A-1",
         "shard": "A",
         "service": null,
-        "dns": "heal-a-1-g10",
-        "url": "http://heal-a-1-g10:8000",
-        "container_name": "2-heal-a-1-g10",
-        "generation": 10,
+        "dns": "heal-a-1-g11",
+        "url": "http://heal-a-1-g11:8000",
+        "container_name": "2-heal-a-1-g11",
+        "generation": 11,
         "managed": true,
         "status": "healthy",
-        "container_running": true
+        "container_running": false
       }
     ],
     "B": [
@@ -54,7 +54,7 @@
         "generation": 7,
         "managed": true,
         "status": "healthy",
-        "container_running": false
+        "container_running": true
       }
     ]
   },

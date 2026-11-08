@@ -6,7 +6,9 @@
       "end": 1000,
       "replicas": [
         "http://bank-a1:8000",
-        "http://bank-a2:8000"
+        "http://bank-a2:8000",
+        "http://heal-a-0-g11:8000",
+        "http://heal-a-1-g11:8000"
       ]
     },
     "B": {

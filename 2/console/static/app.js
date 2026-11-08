@@ -1238,6 +1238,27 @@
     return data;
   }
 
+  async function clearLabLiveBoard() {
+    try {
+      const res = await fetch("/api/lab/clear", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok || data.ok === false) {
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      labStepCount = 0;
+      labReqCount = 0;
+      labPhaseSig = "";
+      await refreshLabStatus();
+    } catch (err) {
+      const row = $("#labRunStatus");
+      if (row) {
+        row.innerHTML = `<span class="pill bad"><span class="dot" aria-hidden="true"></span>${escapeHtml(
+          err.message || String(err)
+        )}</span>`;
+      }
+    }
+  }
+
   async function runLabExperiment(id) {
     setLabButtonsDisabled(true);
     labStepCount = 0;
@@ -1885,6 +1906,8 @@
   );
   // dockerRefreshBtn bound below with optional chaining
   $("#labRefreshBtn")?.addEventListener("click", () => refreshLabStatus());
+  $("#labClearBtn")?.addEventListener("click", () => clearLabLiveBoard());
+  $("#labClearReqBtn")?.addEventListener("click", () => clearLabLiveBoard());
 
   $("#bonusTrafficStart")?.addEventListener("click", async () => {
     await fetch("/api/bonus/traffic/start", { method: "POST" });
