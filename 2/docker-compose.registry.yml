@@ -1,14 +1,14 @@
-# Registry overlay — does NOT replace local compose.
+# GHCR overlay — does NOT replace local compose.
 #
 # Local (unchanged):
 #   docker compose up -d --build
 #   docker compose --profile bonus up -d --build
 #
-# From GHCR / Docker Hub:
+# From GitHub Container Registry:
 #   docker compose -f docker-compose.yml -f docker-compose.registry.yml pull
 #   docker compose -f docker-compose.yml -f docker-compose.registry.yml --profile bonus up -d --no-build
 #
-# Optional: copy .env.images.example → .env to point at Docker Hub instead of GHCR.
+# Optional: copy .env.images.example → .env to override image names.
 
 services:
   bank-a1:
