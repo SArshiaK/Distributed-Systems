@@ -1,0 +1,101 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: shard-map
+  namespace: banking
+  labels:
+    app.kubernetes.io/part-of: distributed-banking
+data:
+  shard_map.json: |
+    {
+      "epoch": 1,
+      "shards": {
+        "A": {
+          "start": 1,
+          "end": 1000,
+          "replicas": ["http://bank-a:8000"]
+        },
+        "B": {
+          "start": 1001,
+          "end": 2000,
+          "replicas": ["http://bank-b:8000"]
+        }
+      }
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: db-init-a
+  namespace: banking
+data:
+  01-init.sql: |
+    CREATE TABLE IF NOT EXISTS accounts (
+        account_id TEXT PRIMARY KEY,
+        balance NUMERIC(14, 2) NOT NULL CHECK (balance >= 0)
+    );
+    INSERT INTO accounts (account_id, balance)
+    SELECT 'A' || lpad(i::text, 4, '0'), 1000.00
+    FROM generate_series(1, 1000) AS i
+    ON CONFLICT (account_id) DO NOTHING;
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: db-init-b
+  namespace: banking
+data:
+  01-init.sql: |
+    CREATE TABLE IF NOT EXISTS accounts (
+        account_id TEXT PRIMARY KEY,
+        balance NUMERIC(14, 2) NOT NULL CHECK (balance >= 0)
+    );
+    INSERT INTO accounts (account_id, balance)
+    SELECT 'A' || lpad(i::text, 4, '0'), 1000.00
+    FROM generate_series(1001, 2000) AS i
+    ON CONFLICT (account_id) DO NOTHING;
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: db-init-coord
+  namespace: banking
+data:
+  01-init.sql: |
+    CREATE TABLE IF NOT EXISTS distributed_transactions (
+        transaction_id TEXT PRIMARY KEY,
+        from_account TEXT NOT NULL,
+        to_account TEXT NOT NULL,
+        amount NUMERIC(14, 2) NOT NULL,
+        from_shard TEXT NOT NULL,
+        to_shard TEXT NOT NULL,
+        status TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS transaction_participants (
+        transaction_id TEXT NOT NULL REFERENCES distributed_transactions(transaction_id),
+        shard_id TEXT NOT NULL,
+        operation TEXT NOT NULL,
+        account TEXT NOT NULL,
+        vote TEXT,
+        ack TEXT,
+        PRIMARY KEY (transaction_id, shard_id)
+    );
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: db-credentials
+  namespace: banking
+  labels:
+    app.kubernetes.io/part-of: distributed-banking
+type: Opaque
+stringData:
+  POSTGRES_USER: bank
+  POSTGRES_PASSWORD: bank
+  POSTGRES_DB_BANK: bank
+  POSTGRES_DB_COORD: coord
+  DATABASE_URL_A: postgresql://bank:bank@db-a:5432/bank
+  DATABASE_URL_B: postgresql://bank:bank@db-b:5432/bank
+  DATABASE_URL_COORD: postgresql://bank:bank@db-coord:5432/coord

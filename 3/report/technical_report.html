@@ -1,0 +1,1202 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>گزارش فنی · Assignment 3 · Fault-Tolerant Banking on Kubernetes</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Crimson+Pro:wght@500;600;700&family=Vazirmatn:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      @page {
+        size: A4;
+        margin: 16mm 14mm;
+      }
+
+      :root {
+        --primary: #2563eb;
+        --on-primary: #ffffff;
+        --secondary: #3b82f6;
+        --accent: #ea580c;
+        --bg: #f8fafc;
+        --fg: #1e293b;
+        --muted: #e9eff8;
+        --muted-fg: #475569;
+        --border: #e2e8f0;
+        --card: #ffffff;
+        --ok: #166534;
+        --warn: #b45309;
+        --a: #1d4ed8;
+        --a-soft: #dbeafe;
+        --b: #7c3aed;
+        --b-soft: #ede9fe;
+        --db: #0f766e;
+        --db-soft: #ccfbf1;
+        --gw: #ea580c;
+        --gw-soft: #ffedd5;
+        --coord: #334155;
+        --k8s: #326ce5;
+        --font-display: "Crimson Pro", "Vazirmatn", serif;
+        --font-body: "Vazirmatn", "Atkinson Hyperlegible", sans-serif;
+        --font-en: "Atkinson Hyperlegible", "Vazirmatn", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        font-size: 11pt;
+      }
+
+      body {
+        margin: 0;
+        background:
+          radial-gradient(circle at top left, rgba(37, 99, 235, 0.07), transparent 40%),
+          linear-gradient(180deg, #f8fafc 0%, #ffffff 45%, #f1f5f9 100%);
+        color: var(--fg);
+        font-family: var(--font-body);
+        line-height: 1.75;
+      }
+
+      .sheet {
+        max-width: 210mm;
+        margin: 0 auto;
+        padding: 28px 32px 56px;
+        background: var(--card);
+        box-shadow: 0 18px 50px rgba(30, 41, 59, 0.08);
+      }
+
+      .print-bar {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-bottom: 1.2rem;
+      }
+
+      .print-btn {
+        appearance: none;
+        border: 1px solid var(--fg);
+        background: var(--fg);
+        color: #fff;
+        font-family: var(--font-body);
+        font-size: 0.92rem;
+        font-weight: 600;
+        padding: 10px 18px;
+        cursor: pointer;
+        border-radius: 2px;
+        transition: background 200ms ease, transform 200ms ease;
+      }
+
+      .print-btn:hover {
+        background: #0f172a;
+        transform: translateY(-1px);
+      }
+
+      .print-btn:focus-visible {
+        outline: 3px solid rgba(37, 99, 235, 0.35);
+        outline-offset: 2px;
+      }
+
+      .print-btn.ghost {
+        background: #fff;
+        color: var(--fg);
+      }
+
+      .kicker {
+        margin: 0 0 0.35rem;
+        color: var(--accent);
+        font-family: var(--font-en);
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 0 0 0.45rem;
+        font-family: var(--font-display);
+        font-size: 1.85rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        line-height: 1.25;
+      }
+
+      h2 {
+        margin: 2rem 0 0.65rem;
+        padding-bottom: 0.4rem;
+        border-bottom: 2px solid var(--fg);
+        font-family: var(--font-display);
+        font-size: 1.28rem;
+        font-weight: 600;
+        page-break-after: avoid;
+      }
+
+      h3 {
+        margin: 1.15rem 0 0.4rem;
+        font-family: var(--font-display);
+        font-size: 1.05rem;
+        color: #334155;
+        page-break-after: avoid;
+      }
+
+      p {
+        margin: 0.4rem 0 0.75rem;
+        text-align: justify;
+      }
+
+      .meta {
+        color: var(--muted-fg);
+        font-size: 0.92rem;
+      }
+
+      .repo-link {
+        color: var(--primary);
+        text-decoration: underline;
+        text-underline-offset: 2px;
+        word-break: break-all;
+      }
+
+      .lede {
+        margin-top: 0.85rem;
+        font-size: 1.02rem;
+        color: #334155;
+      }
+
+      .mono {
+        font-family: Consolas, "Courier New", monospace;
+        font-size: 0.88em;
+        direction: ltr;
+        unicode-bidi: isolate;
+      }
+
+      .code-block {
+        position: relative;
+        margin: 0.55rem 0 1rem;
+        border: 1px solid #1e293b;
+        border-radius: 2px;
+        background: #0f172a;
+        direction: ltr;
+      }
+
+      pre.code {
+        margin: 0;
+        padding: 12px 72px 12px 14px;
+        background: transparent;
+        color: #e2e8f0;
+        border: 0;
+        overflow: visible;
+        direction: ltr;
+        text-align: left;
+        font-family: Consolas, "Courier New", monospace;
+        font-size: 0.84rem;
+        line-height: 1.55;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+
+      pre.code code {
+        font-family: inherit;
+        font-size: inherit;
+        color: inherit;
+        background: transparent;
+      }
+
+      .copy-btn {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        z-index: 1;
+        appearance: none;
+        border: 1px solid #334155;
+        background: #1e293b;
+        color: #cbd5e1;
+        font-family: var(--font-en);
+        font-size: 0.68rem;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        line-height: 1;
+        padding: 6px 10px;
+        border-radius: 2px;
+        cursor: pointer;
+        transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+      }
+
+      .copy-btn:hover {
+        background: #334155;
+        color: #fff;
+      }
+
+      .copy-btn:focus-visible {
+        outline: 2px solid rgba(37, 99, 235, 0.45);
+        outline-offset: 1px;
+      }
+
+      .copy-btn.copied {
+        border-color: #166534;
+        background: #14532d;
+        color: #bbf7d0;
+      }
+
+      .step-label {
+        margin: 1rem 0 0.25rem;
+        color: var(--muted-fg);
+        font-size: 0.88rem;
+        font-weight: 600;
+      }
+
+      .toc {
+        margin: 1.4rem 0 0.4rem;
+        padding: 1rem 1.1rem;
+        background: var(--muted);
+        border: 1px solid var(--border);
+      }
+
+      .toc ol {
+        margin: 0.5rem 0 0;
+        padding-inline-start: 1.3rem;
+      }
+
+      .toc a {
+        color: var(--fg);
+        text-decoration: none;
+        border-bottom: 1px solid transparent;
+      }
+
+      .toc a:hover {
+        border-bottom-color: var(--accent);
+      }
+
+      table.seq {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 0.7rem 0 1rem;
+        font-size: 0.92rem;
+      }
+
+      table.seq th,
+      table.seq td {
+        border: 1px solid var(--border);
+        padding: 8px 10px;
+        text-align: right;
+        vertical-align: top;
+      }
+
+      table.seq th {
+        background: var(--muted);
+        font-weight: 700;
+      }
+
+      .figure {
+        margin: 1rem 0 1.2rem;
+        border: 1px solid var(--border);
+        background: #fff;
+        page-break-inside: avoid;
+      }
+
+      .figure-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: baseline;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--border);
+        background: #fafafa;
+      }
+
+      .figure-head strong {
+        font-family: var(--font-display);
+      }
+
+      .figure-head span {
+        font-family: var(--font-en);
+        font-size: 0.72rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted-fg);
+      }
+
+      .figure svg {
+        display: block;
+        width: 100%;
+        height: auto;
+        direction: ltr;
+      }
+
+      .figure-cap {
+        margin: 0;
+        padding: 8px 12px 10px;
+        color: var(--muted-fg);
+        font-size: 0.86rem;
+        border-top: 1px solid var(--border);
+      }
+
+      ul.clean {
+        margin: 0.35rem 0 0.8rem;
+        padding-inline-start: 1.25rem;
+      }
+
+      ul.clean li {
+        margin: 0.28rem 0;
+      }
+
+      .pending {
+        margin: 0.5rem 0 0.2rem;
+        color: var(--muted-fg);
+        font-size: 0.95rem;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .print-btn {
+          transition: none;
+        }
+      }
+
+      @media print {
+        body {
+          background: #fff;
+        }
+
+        .sheet {
+          box-shadow: none;
+          max-width: none;
+          padding: 0;
+        }
+
+        .print-bar,
+        .copy-btn {
+          display: none !important;
+        }
+
+        a {
+          color: inherit;
+          text-decoration: none;
+        }
+
+        .figure {
+          break-inside: avoid;
+        }
+
+        .code-block {
+          border-color: #cbd5e1;
+          background: #f8fafc;
+        }
+
+        pre.code {
+          padding-inline-end: 14px;
+          color: #0f172a;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="sheet">
+      <div class="print-bar">
+        <button class="print-btn ghost" type="button" onclick="window.scrollTo(0, 0)">
+          بالای صفحه
+        </button>
+        <button class="print-btn" type="button" onclick="window.print()">چاپ / PDF</button>
+      </div>
+
+      <p class="kicker">Distributed Systems · Assignment 3</p>
+      <h1>گزارش فنی بانکداری توزیع‌شدهٔ تحمل‌پذیر خطا روی Kubernetes</h1>
+      <p class="meta">
+        مبنا: سیستم Assignment&nbsp;2 (sharding، replica، Gateway، 2PC) · استقرار روی
+        Minikube / Kubernetes
+      </p>
+      <p class="lede">
+        این گزارش مهاجرت پلتفرم بانکداری توزیع‌شده از Docker Compose به Kubernetes را
+        مستند می‌کند. منطق دامنه بدون تغییر باقی می‌ماند: حساب‌ها بین دو shard پارتیشن
+        می‌شوند، هر shard چند replica برنامه‌ای دارد، Gateway مسیر را از روی shard map
+        انتخاب می‌کند، و انتقال بین‌shard با Coordinator و Two-Phase Commit هماهنگ می‌شود.
+        آنچه عوض می‌شود بستر اجراست؛ Podها موقتی‌اند، داده باید پایدار بماند، و مسیرها باید
+        با Service discovery در برابر حذف Pod، scale، آپدیت و failover دیتابیس درست بمانند.
+      </p>
+
+      <nav class="toc" aria-label="فهرست">
+        <strong>فهرست مطالب</strong>
+        <ol>
+          <li><a href="#s1">معماری و نگاشت به منابع Kubernetes</a></li>
+          <li><a href="#s2">استقرار هسته روی Minikube</a></li>
+          <li><a href="#s3">Persistence با PersistentVolumeClaim</a></li>
+          <li><a href="#s4">Primary / Standby و Failover</a></li>
+          <li><a href="#s5">Probes و Self-Healing</a></li>
+          <li><a href="#s6">ConfigMap، Secret و NetworkPolicy</a></li>
+          <li><a href="#s7">Autoscaling با HPA</a></li>
+          <li><a href="#s8">Rolling Update و Rollback</a></li>
+          <li><a href="#s9">آزمایش‌های اجباری و شواهد صحت</a></li>
+          <li><a href="#s10">محدودیت‌ها و نتایج</a></li>
+        </ol>
+      </nav>
+
+      <!-- ===================== SECTION 1 ===================== -->
+      <section id="s1">
+        <h2>۱. معماری و نگاشت به منابع Kubernetes</h2>
+        <p>
+          نقطهٔ شروع این پروژه همان پلتفرم Assignment&nbsp;2 است. هدف بخش اول، تثبیت
+          معماری منطقی و تعیین نگاشت دقیق هر جزء به منبع مناسب Kubernetes است تا استقرار
+          بعدی روی یک طرح واحد انجام شود و routing با تعویض Podها نشکند.
+        </p>
+
+        <h3>۱.۱ اجزای حفظ‌شده از Assignment 2</h3>
+        <p>
+          قواعد دامنه و مرزهای صحت از Assignment&nbsp;2 بدون تغییر منتقل می‌شوند:
+        </p>
+        <ul class="clean">
+          <li>شاردینگ حساب‌ها: بازهٔ A برابر ۱–۱۰۰۰ و بازهٔ B برابر ۱۰۰۱–۲۰۰۰</li>
+          <li>چند replica برنامه‌ای روی هر shard، با یک پایگاه‌دادهٔ مشترک همان shard</li>
+          <li>Gateway آگاه از shard و انتخاب replica سالم برای سرویس‌دهی</li>
+          <li>Coordinator با پروتکل 2PC و ثبت ماندگار تصمیم تراکنش</li>
+          <li>
+            قیود صحت: بدون موجودی تکراری، بدون transfer ناقص دائمی، و بدون اعلام موفقیت
+            برای نتیجهٔ نامعلوم
+          </li>
+        </ul>
+        <p>
+          تفاوت اصلی در لایهٔ اجراست. به‌جای کانتینرهای ثابت Compose، workloadها به‌صورت
+          Pod روی خوشه اجرا می‌شوند و باید در برابر حذف Pod، تغییر مقیاس، rolling update و
+          شکست پایگاه‌داده همچنان در دسترس و صحیح بمانند.
+        </p>
+
+        <h3>۱.۲ معماری منطقی</h3>
+        <p>
+          معماری منطقی سیستم با Assignment&nbsp;2 یکسان است. کلاینت فقط با Gateway صحبت
+          می‌کند؛ Gateway درخواست‌های محلی را به shard مربوط و درخواست‌های cross-shard را
+          به Coordinator می‌فرستد. هر لایهٔ اپ به پایگاه‌دادهٔ خودش وابسته است. روی
+          Kubernetes، هویت پایدار برای ارتباط داخلی از نام Service گرفته می‌شود، نه از IP
+          موقتی Pod.
+        </p>
+
+        <figure class="figure">
+          <div class="figure-head">
+            <strong>شکل ۱ · معماری منطقی سیستم بانکی</strong>
+            <span>LOGICAL ARCHITECTURE</span>
+          </div>
+          <svg viewBox="0 0 840 360" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Logical banking architecture" direction="ltr">
+            <rect x="310" y="18" width="220" height="42" fill="#fff" stroke="#1e293b" stroke-width="2" />
+            <text x="420" y="45" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="14" font-weight="700">Client</text>
+
+            <line x1="420" y1="60" x2="420" y2="88" stroke="#475569" stroke-width="2" />
+            <polygon points="420,94 415,84 425,84" fill="#475569" />
+
+            <rect x="300" y="96" width="240" height="48" fill="#ffedd5" stroke="#ea580c" stroke-width="2.5" />
+            <text x="420" y="126" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="15" font-weight="700" fill="#9a3412">Gateway</text>
+
+            <line x1="340" y1="144" x2="180" y2="188" stroke="#475569" stroke-width="1.8" />
+            <line x1="420" y1="144" x2="420" y2="188" stroke="#475569" stroke-width="1.8" />
+            <line x1="500" y1="144" x2="660" y2="188" stroke="#475569" stroke-width="1.8" />
+
+            <rect x="60" y="196" width="240" height="70" fill="#dbeafe" stroke="#1d4ed8" stroke-width="2.5" />
+            <text x="180" y="226" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="15" font-weight="700" fill="#1d4ed8">Shard A apps</text>
+            <text x="180" y="248" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="12" fill="#1e3a8a">bank replicas · range 1–1000</text>
+
+            <rect x="300" y="196" width="240" height="70" fill="#f1f5f9" stroke="#334155" stroke-width="2.5" />
+            <text x="420" y="226" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="15" font-weight="700" fill="#334155">Coordinator</text>
+            <text x="420" y="248" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="12" fill="#475569">2PC · durable decisions</text>
+
+            <rect x="540" y="196" width="240" height="70" fill="#ede9fe" stroke="#7c3aed" stroke-width="2.5" />
+            <text x="660" y="226" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="15" font-weight="700" fill="#7c3aed">Shard B apps</text>
+            <text x="660" y="248" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="12" fill="#5b21b6">bank replicas · range 1001–2000</text>
+
+            <line x1="180" y1="266" x2="180" y2="296" stroke="#0f766e" stroke-width="2" />
+            <line x1="420" y1="266" x2="420" y2="296" stroke="#0f766e" stroke-width="2" />
+            <line x1="660" y1="266" x2="660" y2="296" stroke="#0f766e" stroke-width="2" />
+
+            <rect x="90" y="300" width="180" height="40" fill="#ccfbf1" stroke="#0f766e" stroke-width="2" stroke-dasharray="5 4" />
+            <text x="180" y="325" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="13" font-weight="700" fill="#115e59">db-a</text>
+
+            <rect x="330" y="300" width="180" height="40" fill="#ccfbf1" stroke="#0f766e" stroke-width="2" stroke-dasharray="5 4" />
+            <text x="420" y="325" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="13" font-weight="700" fill="#115e59">db-coord</text>
+
+            <rect x="570" y="300" width="180" height="40" fill="#ccfbf1" stroke="#0f766e" stroke-width="2" stroke-dasharray="5 4" />
+            <text x="660" y="325" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="13" font-weight="700" fill="#115e59">db-b</text>
+          </svg>
+          <figcaption class="figure-cap">
+            منطق دامنه ثابت است؛ واحد اجرا از کانتینر Compose به Pod Kubernetes تبدیل
+            می‌شود.
+          </figcaption>
+        </figure>
+
+        <h3>۱.۳ نگاشت اجزا به منابع Kubernetes</h3>
+        <p>
+          انتخاب نوع منبع بر اساس نقش هر جزء در سیستم انجام شده است. سرویس‌های بدون state
+          محلی (Gateway، bank، coordinator، console) با
+          <span class="mono">Deployment</span> مدیریت می‌شوند تا بتوان آن‌ها را scale کرد و
+          پس از حذف Pod دوباره ساخت. پایگاه‌های داده که به هویت پایدار و دیسک نیاز دارند با
+          <span class="mono">StatefulSet</span> و
+          <span class="mono">PersistentVolumeClaim</span> مستقر می‌شوند. کشف و مسیریابی
+          داخلی از طریق <span class="mono">Service</span> انجام می‌گیرد و دسترسی خارجی در
+          فاز اول با <span class="mono">NodePort</span> فراهم می‌شود.
+        </p>
+
+        <table class="seq">
+          <thead>
+            <tr>
+              <th>جزء در Compose</th>
+              <th>منبع Kubernetes</th>
+              <th>توجیه</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="mono">gateway</span></td>
+              <td>Deployment + Service (ClusterIP) + NodePort</td>
+              <td>
+                نقطهٔ ورود کلاینت؛ بدون state محلی؛ باید پس از تعویض Pod همچنان از بیرون
+                در دسترس باشد
+              </td>
+            </tr>
+            <tr>
+              <td><span class="mono">bank-a*</span> / <span class="mono">bank-b*</span></td>
+              <td>Deployment per shard + Service per shard</td>
+              <td>
+                چند replica برنامه‌ای روی هر shard؛ توزیع ترافیک روی endpointهای Ready
+              </td>
+            </tr>
+            <tr>
+              <td><span class="mono">coordinator</span></td>
+              <td>Deployment + Service</td>
+              <td>
+                منطق 2PC بدون state محلی در فرآیند؛ ماندگاری تصمیم‌ها در
+                <span class="mono">db-coord</span>
+              </td>
+            </tr>
+            <tr>
+              <td><span class="mono">console</span></td>
+              <td>Deployment + Service (دسترسی خارجی اختیاری)</td>
+              <td>رابط آزمایشگاهی برای مشاهده و اجرای سناریوها</td>
+            </tr>
+            <tr>
+              <td><span class="mono">db-a</span> / <span class="mono">db-b</span> / <span class="mono">db-coord</span></td>
+              <td>StatefulSet + PVC (و در ادامه primary/standby)</td>
+              <td>
+                داده باید پس از حذف یا جابه‌جایی Pod باقی بماند؛ هویت پایدار برای replication
+                لازم است
+              </td>
+            </tr>
+            <tr>
+              <td><span class="mono">config/shard_map.json</span></td>
+              <td>ConfigMap</td>
+              <td>پیکربندی غیرحساس و قابل نسخه‌گذاری جدا از ایمیج</td>
+            </tr>
+            <tr>
+              <td>رمز عبور و credentialهای پایگاه‌داده</td>
+              <td>Secret</td>
+              <td>جداسازی اسرار از ایمیج و Manifestهای عمومی</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>۱.۴ استقرار فیزیکی هدف روی Minikube</h3>
+        <p>
+          استقرار هدف در یک namespace جدا (مثلاً
+          <span class="mono">banking</span>) روی Minikube تعریف می‌شود. شکل ۲ رابطهٔ
+          Deploymentها، Serviceها و StatefulSetها را نشان می‌دهد. Gateway به نام Service
+          بانک‌ها و Coordinator وصل می‌شود؛ بانک‌ها به Service مربوط به پایگاه‌دادهٔ همان
+          shard؛ و ماندگاری داده روی PVC پشت StatefulSetها قرار می‌گیرد. replication
+          واقعی primary/standby در بخش مربوط به failover اضافه می‌شود.
+        </p>
+
+        <figure class="figure">
+          <div class="figure-head">
+            <strong>شکل ۲ · نگاشت به منابع Kubernetes</strong>
+            <span>KUBERNETES RESOURCE MAP</span>
+          </div>
+          <svg
+            viewBox="0 0 860 520"
+            xmlns="http://www.w3.org/2000/svg"
+            role="img"
+            aria-label="Kubernetes resource mapping"
+            direction="ltr"
+          >
+            <defs>
+              <marker id="m2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                <path d="M0 0 L10 5 L0 10 z" fill="#64748b" />
+              </marker>
+            </defs>
+
+            <!-- Cluster frame -->
+            <rect x="24" y="16" width="812" height="456" rx="4" fill="#f8fafc" stroke="#326ce5" stroke-width="2" />
+            <text x="40" y="42" font-family="Atkinson Hyperlegible, sans-serif" font-size="13" font-weight="700" fill="#326ce5">
+              Minikube · namespace: banking
+            </text>
+
+            <!-- Layer labels -->
+            <text x="40" y="78" font-family="Atkinson Hyperlegible, sans-serif" font-size="11" font-weight="700" fill="#94a3b8" letter-spacing="0.06em">EXTERNAL ACCESS</text>
+            <text x="40" y="168" font-family="Atkinson Hyperlegible, sans-serif" font-size="11" font-weight="700" fill="#94a3b8" letter-spacing="0.06em">EDGE</text>
+            <text x="40" y="268" font-family="Atkinson Hyperlegible, sans-serif" font-size="11" font-weight="700" fill="#94a3b8" letter-spacing="0.06em">APPLICATION TIER</text>
+            <text x="40" y="388" font-family="Atkinson Hyperlegible, sans-serif" font-size="11" font-weight="700" fill="#94a3b8" letter-spacing="0.06em">DATA TIER</text>
+
+            <!-- External -->
+            <rect x="300" y="56" width="260" height="44" fill="#ffedd5" stroke="#ea580c" stroke-width="2" />
+            <text x="430" y="76" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="13" font-weight="700" fill="#9a3412">NodePort</text>
+            <text x="430" y="92" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="11" fill="#9a3412">client entry</text>
+
+            <line x1="430" y1="100" x2="430" y2="124" stroke="#64748b" stroke-width="1.8" marker-end="url(#m2)" />
+
+            <!-- Gateway -->
+            <rect x="280" y="128" width="300" height="56" fill="#fff" stroke="#1e293b" stroke-width="2" />
+            <text x="430" y="152" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="14" font-weight="700">gateway</text>
+            <text x="430" y="170" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="11" fill="#64748b">Deployment + Service</text>
+
+            <!-- Fan-out lines -->
+            <line x1="430" y1="184" x2="430" y2="204" stroke="#64748b" stroke-width="1.8" />
+            <line x1="150" y1="204" x2="710" y2="204" stroke="#64748b" stroke-width="1.8" />
+            <line x1="150" y1="204" x2="150" y2="224" stroke="#64748b" stroke-width="1.8" marker-end="url(#m2)" />
+            <line x1="430" y1="204" x2="430" y2="224" stroke="#64748b" stroke-width="1.8" marker-end="url(#m2)" />
+            <line x1="710" y1="204" x2="710" y2="224" stroke="#64748b" stroke-width="1.8" marker-end="url(#m2)" />
+
+            <!-- App tier -->
+            <rect x="50" y="228" width="200" height="88" fill="#dbeafe" stroke="#1d4ed8" stroke-width="2" />
+            <text x="150" y="258" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="14" font-weight="700" fill="#1d4ed8">bank-a</text>
+            <text x="150" y="278" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="11" fill="#1e3a8a">Deployment · replicas ≥ 2</text>
+            <text x="150" y="296" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="11" fill="#1e3a8a">Service: bank-a</text>
+
+            <rect x="330" y="228" width="200" height="88" fill="#f1f5f9" stroke="#334155" stroke-width="2" />
+            <text x="430" y="258" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="14" font-weight="700" fill="#334155">coordinator</text>
+            <text x="430" y="278" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="11" fill="#475569">Deployment · 2PC</text>
+            <text x="430" y="296" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="11" fill="#475569">Service: coordinator</text>
+
+            <rect x="610" y="228" width="200" height="88" fill="#ede9fe" stroke="#7c3aed" stroke-width="2" />
+            <text x="710" y="258" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="14" font-weight="700" fill="#7c3aed">bank-b</text>
+            <text x="710" y="278" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="11" fill="#5b21b6">Deployment · replicas ≥ 2</text>
+            <text x="710" y="296" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="11" fill="#5b21b6">Service: bank-b</text>
+
+            <!-- Down to data -->
+            <line x1="150" y1="316" x2="150" y2="348" stroke="#0f766e" stroke-width="1.8" marker-end="url(#m2)" />
+            <line x1="430" y1="316" x2="430" y2="348" stroke="#0f766e" stroke-width="1.8" marker-end="url(#m2)" />
+            <line x1="710" y1="316" x2="710" y2="348" stroke="#0f766e" stroke-width="1.8" marker-end="url(#m2)" />
+
+            <!-- Data tier -->
+            <rect x="50" y="352" width="200" height="88" fill="#ccfbf1" stroke="#0f766e" stroke-width="2" />
+            <text x="150" y="382" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="14" font-weight="700" fill="#115e59">db-a</text>
+            <text x="150" y="402" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="11" fill="#115e59">StatefulSet + PVC</text>
+            <text x="150" y="420" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="11" fill="#115e59">shard A data</text>
+
+            <rect x="330" y="352" width="200" height="88" fill="#ccfbf1" stroke="#0f766e" stroke-width="2" />
+            <text x="430" y="382" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="14" font-weight="700" fill="#115e59">db-coord</text>
+            <text x="430" y="402" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="11" fill="#115e59">StatefulSet + PVC</text>
+            <text x="430" y="420" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="11" fill="#115e59">2PC decisions</text>
+
+            <rect x="610" y="352" width="200" height="88" fill="#ccfbf1" stroke="#0f766e" stroke-width="2" />
+            <text x="710" y="382" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="14" font-weight="700" fill="#115e59">db-b</text>
+            <text x="710" y="402" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="11" fill="#115e59">StatefulSet + PVC</text>
+            <text x="710" y="420" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="11" fill="#115e59">shard B data</text>
+
+            <!-- Legend -->
+            <rect x="24" y="484" width="16" height="16" fill="#ffedd5" stroke="#ea580c" stroke-width="1.5" />
+            <text x="48" y="496" font-family="Atkinson Hyperlegible, sans-serif" font-size="11" fill="#475569">NodePort</text>
+            <rect x="128" y="484" width="16" height="16" fill="#fff" stroke="#1e293b" stroke-width="1.5" />
+            <text x="152" y="496" font-family="Atkinson Hyperlegible, sans-serif" font-size="11" fill="#475569">Deployment + Service</text>
+            <rect x="320" y="484" width="16" height="16" fill="#ccfbf1" stroke="#0f766e" stroke-width="1.5" />
+            <text x="344" y="496" font-family="Atkinson Hyperlegible, sans-serif" font-size="11" fill="#475569">StatefulSet + PVC</text>
+            <rect x="490" y="484" width="16" height="16" fill="#dbeafe" stroke="#1d4ed8" stroke-width="1.5" />
+            <text x="514" y="496" font-family="Atkinson Hyperlegible, sans-serif" font-size="11" fill="#475569">Shard A</text>
+            <rect x="590" y="484" width="16" height="16" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.5" />
+            <text x="614" y="496" font-family="Atkinson Hyperlegible, sans-serif" font-size="11" fill="#475569">Shard B</text>
+          </svg>
+          <figcaption class="figure-cap">
+            لایه‌بندی استقرار: ورود خارجی، Gateway، لایهٔ اپلیکیشن با Service پایدار، و
+            لایهٔ داده با StatefulSet و PVC. ارتباط داخلی فقط با نام Service انجام می‌شود.
+          </figcaption>
+        </figure>
+
+        <h3>۱.۵ جریان درخواست و پایداری routing</h3>
+        <p>
+          در Kubernetes عمر Pod محدود است و با هر recreate، آدرس IP عوض می‌شود. اتصال
+          مستقیم Gateway به IP یک Pod پس از restart همان Pod مسیر را می‌شکند. طراحی این
+          سیستم Gateway را فقط به نام Service متصل می‌کند؛ برای مثال
+          <span class="mono">http://bank-a:8000</span>. کنترل‌پلن Kubernetes فهرست
+          endpointهای Ready را به‌روز نگه می‌دارد و ترافیک فقط به Podهای سالم هدایت
+          می‌شود. همین سازوکار پایهٔ تحمل خطای سطح اپ و آماده‌سازی برای readiness probe
+          است.
+        </p>
+
+        <figure class="figure">
+          <div class="figure-head">
+            <strong>شکل ۳ · جریان درخواست با Service Discovery</strong>
+            <span>REQUEST FLOW</span>
+          </div>
+          <svg
+            viewBox="0 0 880 420"
+            xmlns="http://www.w3.org/2000/svg"
+            role="img"
+            aria-label="Request flow via Services"
+            direction="ltr"
+          >
+            <defs>
+              <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                <path d="M0 0 L10 5 L0 10 z" fill="#64748b" />
+              </marker>
+            </defs>
+
+            <text x="32" y="28" font-family="Atkinson Hyperlegible, sans-serif" font-size="11" font-weight="700" fill="#94a3b8" letter-spacing="0.08em">
+              CLIENT → GATEWAY → SERVICE → READY PODS
+            </text>
+
+            <!-- Client -->
+            <rect x="40" y="170" width="100" height="52" fill="#fff" stroke="#1e293b" stroke-width="2" />
+            <text x="90" y="201" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="14" font-weight="700">Client</text>
+
+            <line x1="140" y1="196" x2="188" y2="196" stroke="#64748b" stroke-width="1.8" marker-end="url(#arr)" />
+
+            <!-- Gateway -->
+            <rect x="192" y="162" width="140" height="68" fill="#ffedd5" stroke="#ea580c" stroke-width="2" />
+            <text x="262" y="192" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="14" font-weight="700" fill="#9a3412">Gateway</text>
+            <text x="262" y="212" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="11" fill="#9a3412">shard map</text>
+
+            <!-- Spine from gateway -->
+            <line x1="332" y1="196" x2="372" y2="196" stroke="#64748b" stroke-width="1.8" />
+            <line x1="372" y1="70" x2="372" y2="322" stroke="#64748b" stroke-width="1.8" />
+
+            <!-- Row bank-a -->
+            <line x1="372" y1="70" x2="400" y2="70" stroke="#64748b" stroke-width="1.8" marker-end="url(#arr)" />
+            <rect x="404" y="44" width="150" height="52" fill="#dbeafe" stroke="#1d4ed8" stroke-width="2" />
+            <text x="479" y="75" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="13" font-weight="700" fill="#1d4ed8">Service bank-a</text>
+            <line x1="554" y1="70" x2="592" y2="70" stroke="#64748b" stroke-width="1.8" marker-end="url(#arr)" />
+            <rect x="596" y="32" width="100" height="36" fill="#fff" stroke="#1d4ed8" stroke-width="1.8" />
+            <text x="646" y="55" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="12" fill="#1e3a8a">Pod a-1</text>
+            <rect x="716" y="32" width="100" height="36" fill="#fff" stroke="#1d4ed8" stroke-width="1.8" />
+            <text x="766" y="55" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="12" fill="#1e3a8a">Pod a-2</text>
+            <line x1="554" y1="70" x2="592" y2="50" stroke="#64748b" stroke-width="1.4" />
+            <line x1="554" y1="70" x2="712" y2="50" stroke="#64748b" stroke-width="1.4" marker-end="url(#arr)" />
+
+            <!-- Row coordinator -->
+            <line x1="372" y1="196" x2="400" y2="196" stroke="#64748b" stroke-width="1.8" marker-end="url(#arr)" />
+            <rect x="404" y="170" width="150" height="52" fill="#f1f5f9" stroke="#334155" stroke-width="2" />
+            <text x="479" y="201" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="13" font-weight="700" fill="#334155">Service coordinator</text>
+            <line x1="554" y1="196" x2="592" y2="196" stroke="#64748b" stroke-width="1.8" marker-end="url(#arr)" />
+            <rect x="596" y="178" width="220" height="36" fill="#fff" stroke="#334155" stroke-width="1.8" />
+            <text x="706" y="201" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="12" fill="#475569">Pod coordinator</text>
+
+            <!-- Row bank-b -->
+            <line x1="372" y1="322" x2="400" y2="322" stroke="#64748b" stroke-width="1.8" marker-end="url(#arr)" />
+            <rect x="404" y="296" width="150" height="52" fill="#ede9fe" stroke="#7c3aed" stroke-width="2" />
+            <text x="479" y="327" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="13" font-weight="700" fill="#7c3aed">Service bank-b</text>
+            <line x1="554" y1="322" x2="592" y2="322" stroke="#64748b" stroke-width="1.8" marker-end="url(#arr)" />
+            <rect x="596" y="304" width="100" height="36" fill="#fff" stroke="#7c3aed" stroke-width="1.8" />
+            <text x="646" y="327" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="12" fill="#5b21b6">Pod b-1</text>
+            <rect x="716" y="304" width="100" height="36" fill="#fff" stroke="#7c3aed" stroke-width="1.8" />
+            <text x="766" y="327" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="12" fill="#5b21b6">Pod b-2</text>
+            <line x1="554" y1="322" x2="592" y2="322" stroke="#64748b" stroke-width="1.4" />
+            <line x1="554" y1="322" x2="712" y2="322" stroke="#64748b" stroke-width="1.4" marker-end="url(#arr)" />
+
+            <!-- Note -->
+            <rect x="40" y="372" width="800" height="36" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1" />
+            <text x="440" y="395" text-anchor="middle" font-family="Atkinson Hyperlegible, sans-serif" font-size="12" fill="#475569">
+              Endpoints include Ready Pods only · unhealthy Pods leave the Service automatically
+            </text>
+          </svg>
+          <figcaption class="figure-cap">
+            Gateway فقط نام Service را می‌شناسد؛ هر Service ترافیک را بین Podهای Ready
+            همان Deployment پخش می‌کند.
+          </figcaption>
+        </figure>
+
+        <h3>۱.۶ تصمیم‌های طراحی تثبیت‌شده</h3>
+        <ul class="clean">
+          <li>خوشهٔ هدف: Minikube روی میزبان توسعه</li>
+          <li>جداسازی منطقی با namespace اختصاصی (مثلاً <span class="mono">banking</span>)</li>
+          <li>دسترسی خارجی فاز اول از طریق NodePort</li>
+          <li>workloadهای اپلیکیشن با Deployment؛ پایگاه‌های داده با StatefulSet و PVC</li>
+          <li>ارتباط داخلی صرفاً از طریق DNS سرویس Kubernetes</li>
+          <li>
+            بازیابی سطح اپلیکیشن با کنترلرهای بومی Kubernetes؛ بدون اتکا به Healer سفارشی
+            Assignment&nbsp;2 در محدودهٔ اصلی
+          </li>
+        </ul>
+      </section>
+
+      <section id="s2">
+        <h2>۲. استقرار هسته روی Minikube</h2>
+        <p>
+          هستهٔ سیستم در namespace
+          <span class="mono">banking</span>
+          با Manifestهای پوشهٔ
+          <span class="mono">3/k8s/base</span>
+          مستقر می‌شود. منطق دامنه همان Assignment&nbsp;2 است؛ فقط بستر اجرا از Docker
+          Compose به Kubernetes جابه‌جا شده است. برای اینکه این جابه‌جایی واضح باشد،
+          استک Compose خاموش می‌شود و فقط خوشهٔ Minikube سرویس‌دهی می‌کند.
+        </p>
+
+        <h3>۲.۱ خاموش‌کردن استک Compose (Assignment 2)</h3>
+        <p>
+          کانتینرهای Compose و Podهای Kubernetes هم‌زمان لازم نیستند. با پایین آوردن
+          پروژهٔ Compose، پورت‌های میزبان آزاد می‌شوند و مشخص است که ترافیک از مسیر
+          Kubernetes می‌آید. ایمیج‌ها روی دیسک می‌مانند؛ فقط کانتینرهای در حال اجرا متوقف
+          می‌شوند.
+        </p>
+        <p class="step-label">از پوشهٔ Assignment 2:</p>
+        <pre class="code" tabindex="0"><code>cd "d:\University\3\Distributed Systems\Assignments\2"
+docker compose -p 2 --profile bonus down</code></pre>
+        <p class="step-label">تأیید اینکه دیگر کانتینر Compose بالا نیست:</p>
+        <pre class="code" tabindex="0"><code>docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"</code></pre>
+
+        <h3>۲.۲ استفاده از ایمیج‌های محلی (بدون دانلود مجدد)</h3>
+        <p>
+          Manifestها به همان ایمیج‌هایی اشاره می‌کنند که قبلاً با
+          <span class="mono">docker compose build</span>
+          ساخته شده‌اند. مقدار
+          <span class="mono">imagePullPolicy: Never</span>
+          مانع pull از رجیستری می‌شود؛ بنابراین از GitHub/GHCR دوباره دانلود نمی‌شود.
+        </p>
+        <table class="seq">
+          <thead>
+            <tr>
+              <th>Workload در Kubernetes</th>
+              <th>ایمیج محلی Docker</th>
+              <th>یادداشت</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="mono">Deployment/bank-a</span></td>
+              <td><span class="mono">2-bank-a1:latest</span></td>
+              <td>همان ایمیج bank_server؛ دو Pod از همین ایمیج</td>
+            </tr>
+            <tr>
+              <td><span class="mono">Deployment/bank-b</span></td>
+              <td><span class="mono">2-bank-b1:latest</span></td>
+              <td>همان ایمیج bank_server برای shard B</td>
+            </tr>
+            <tr>
+              <td><span class="mono">Deployment/gateway</span></td>
+              <td><span class="mono">2-gateway:latest</span></td>
+              <td>بدون تغییر کد؛ فقط env و مسیر config</td>
+            </tr>
+            <tr>
+              <td><span class="mono">Deployment/coordinator</span></td>
+              <td><span class="mono">2-coordinator:latest</span></td>
+              <td>shard map از ConfigMap mount می‌شود</td>
+            </tr>
+            <tr>
+              <td><span class="mono">StatefulSet db-*</span></td>
+              <td><span class="mono">postgres:16-alpine</span></td>
+              <td>همان ایمیج Compose؛ init از ConfigMap</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>
+          Console مربوط به Assignment&nbsp;2 در محدودهٔ فعلی استقرار نمی‌شود: به Docker
+          socket و شناسه‌های ثابت
+          <span class="mono">A1/A2/B1/B2</span>
+          وابسته است و هدف این تمرین Kubernetes است، نه بازتولید همان UI. آزمون‌ها از طریق
+          Gateway و
+          <span class="mono">kubectl</span>
+          انجام می‌شوند.
+        </p>
+        <p class="step-label">نمونهٔ ارجاع ایمیج در Manifest (bank-a):</p>
+        <pre class="code" tabindex="0"><code>image: 2-bank-a1:latest
+imagePullPolicy: Never</code></pre>
+
+        <h3>۲.۳ چرا باید ایمیج را به Minikube load کرد؟</h3>
+        <p>
+          Docker Desktop و Minikube لایه‌های ایمیج جدا دارند. ایمیجی که با
+          <span class="mono">docker images</span>
+          روی میزبان دیده می‌شود، به‌طور خودکار داخل خوشه نیست. بنابراین قبل از apply،
+          همان تگ‌های محلی یک‌بار به Minikube منتقل می‌شوند تا با
+          <span class="mono">imagePullPolicy: Never</span>
+          Pod بتواند ایمیج را پیدا کند.
+        </p>
+        <p class="step-label">شروع خوشه (اگر هنوز بالا نیست):</p>
+        <pre class="code" tabindex="0"><code>minikube start
+minikube status</code></pre>
+        <p class="step-label">بارگذاری ایمیج‌های محلی داخل Minikube:</p>
+        <pre class="code" tabindex="0"><code>cd "d:\University\3\Distributed Systems\Assignments\3\k8s"
+minikube image load 2-bank-a1:latest
+minikube image load 2-bank-b1:latest
+minikube image load 2-gateway:latest
+minikube image load 2-coordinator:latest
+minikube image load postgres:16-alpine</code></pre>
+        <p class="step-label">یا معادل اسکریپت پروژه:</p>
+        <pre class="code" tabindex="0"><code>cd "d:\University\3\Distributed Systems\Assignments\3\k8s"
+.\load-local-images.ps1</code></pre>
+
+        <h3>۲.۴ ساختار Manifestها و دلیل انتخاب‌ها</h3>
+        <table class="seq">
+          <thead>
+            <tr>
+              <th>فایل</th>
+              <th>منابع</th>
+              <th>دلیل</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="mono">namespace.yaml</span></td>
+              <td>Namespace <span class="mono">banking</span></td>
+              <td>جداسازی منابع تمرین از بقیهٔ خوشه</td>
+            </tr>
+            <tr>
+              <td><span class="mono">config.yaml</span></td>
+              <td>ConfigMap + Secret</td>
+              <td>shard map و SQL init و رمز DB جدا از ایمیج</td>
+            </tr>
+            <tr>
+              <td><span class="mono">db-*.yaml</span></td>
+              <td>StatefulSet + headless Service + PVC</td>
+              <td>هویت پایدار و ماندگاری داده پس از حذف Pod</td>
+            </tr>
+            <tr>
+              <td><span class="mono">bank-a.yaml</span> / <span class="mono">bank-b.yaml</span></td>
+              <td>یک Deployment با <span class="mono">replicas: 2</span> + یک Service</td>
+              <td>
+                مدل استاندارد Kubernetes؛ دو Pod جدا با نام Compose لازم نیست و هدف تمرین
+                Deployment است نه بازسازی UI
+              </td>
+            </tr>
+            <tr>
+              <td><span class="mono">coordinator.yaml</span></td>
+              <td>Deployment + ClusterIP</td>
+              <td>2PC داخلی؛ نیاز به ورود خارجی ندارد</td>
+            </tr>
+            <tr>
+              <td><span class="mono">gateway.yaml</span></td>
+              <td>Deployment + NodePort <span class="mono">30081</span></td>
+              <td>نقطهٔ ورود کلاینت از بیرون خوشه</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>۲.۵ نگاشت DNS و shard map</h3>
+        <p>
+          در Kubernetes، Gateway دیگر به نام‌های ثابت Compose مثل
+          <span class="mono">bank-a1</span>
+          وابسته نیست. shard map به Serviceهای پایدار اشاره می‌کند:
+          <span class="mono">http://bank-a:8000</span>
+          و
+          <span class="mono">http://bank-b:8000</span>.
+          خود Service ترافیک را بین Podهای Ready همان Deployment پخش می‌کند. Coordinator
+          نیز از
+          <span class="mono">http://coordinator:8090</span>
+          در دسترس Gateway است و پایگاه‌ها با نام‌های
+          <span class="mono">db-a</span>،
+          <span class="mono">db-b</span>
+          و
+          <span class="mono">db-coord</span>
+          resolve می‌شوند. این تغییر عمدی است: با تعویض Pod، مسیر از روی نام Service درست
+          می‌ماند.
+        </p>
+        <p class="step-label">محتوای shard map روی خوشه:</p>
+        <pre class="code" tabindex="0"><code>{
+  "epoch": 1,
+  "shards": {
+    "A": { "start": 1, "end": 1000, "replicas": ["http://bank-a:8000"] },
+    "B": { "start": 1001, "end": 2000, "replicas": ["http://bank-b:8000"] }
+  }
+}</code></pre>
+
+        <h3>۲.۶ اعمال Manifestها</h3>
+        <p>
+          پس از load ایمیج‌ها، منابع با Kustomize اعمال می‌شوند. اسکریپت
+          <span class="mono">apply.ps1</span>
+          ابتدا load را صدا می‌زند، سپس apply می‌کند و تا Ready شدن DB و اپ‌ها صبر می‌کند
+          تا ترتیب وابستگی Compose در Kubernetes با
+          <span class="mono">rollout status</span>
+          بازتولید شود.
+        </p>
+        <p class="step-label">اعمال یک‌مرحله‌ای:</p>
+        <pre class="code" tabindex="0"><code>cd "d:\University\3\Distributed Systems\Assignments\3\k8s"
+.\apply.ps1</code></pre>
+        <p class="step-label">یا دستی:</p>
+        <pre class="code" tabindex="0"><code>cd "d:\University\3\Distributed Systems\Assignments\3\k8s"
+.\load-local-images.ps1
+kubectl apply -k .\base
+kubectl -n banking rollout status statefulset/db-a --timeout=180s
+kubectl -n banking rollout status statefulset/db-b --timeout=180s
+kubectl -n banking rollout status statefulset/db-coord --timeout=180s
+kubectl -n banking rollout status deployment/bank-a --timeout=180s
+kubectl -n banking rollout status deployment/bank-b --timeout=180s
+kubectl -n banking rollout status deployment/coordinator --timeout=180s
+kubectl -n banking rollout status deployment/gateway --timeout=180s
+kubectl -n banking get pods,svc,sts,pvc</code></pre>
+
+        <h3>۲.۷ بررسی ساختار استقرار</h3>
+        <p>
+          پس از apply، صحت استقرار در دو لایه چک می‌شود: منابع Kubernetes (Pod / Service /
+          StatefulSet / PVC) و رفتار Gateway از بیرون خوشه. روی Windows با درایور Dockerِ
+          Minikube، برای تماس با Gateway از
+          <span class="mono">kubectl port-forward</span>
+          استفاده می‌شود.
+        </p>
+        <p class="step-label">۱) وضعیت کلی namespace:</p>
+        <pre class="code" tabindex="0"><code>kubectl -n banking get pods,svc,deploy,sts,pvc -o wide</code></pre>
+        <p>
+          انتظار: هر دو replica مربوط به
+          <span class="mono">bank-a</span>
+          و
+          <span class="mono">bank-b</span>
+          در حالت
+          <span class="mono">Running</span>
+          و
+          <span class="mono">Ready 1/1</span>؛
+          سه StatefulSet دیتابیس Ready؛ PVCها
+          <span class="mono">Bound</span>؛
+          و Serviceهای
+          <span class="mono">gateway</span>،
+          <span class="mono">bank-a</span>،
+          <span class="mono">bank-b</span>،
+          <span class="mono">coordinator</span>،
+          <span class="mono">db-*</span>
+          موجود باشند.
+        </p>
+        <p class="step-label">۲) جزئیات هر لایه:</p>
+        <pre class="code" tabindex="0"><code>kubectl -n banking get endpoints
+kubectl -n banking describe deploy bank-a bank-b gateway coordinator
+kubectl -n banking describe sts db-a db-b db-coord
+kubectl -n banking get cm,secret</code></pre>
+        <p class="step-label">۳) لاگ مختصر در صورت نیاز:</p>
+        <pre class="code" tabindex="0"><code>kubectl -n banking logs deploy/gateway --tail=50
+kubectl -n banking logs deploy/bank-a --tail=30
+kubectl -n banking logs deploy/coordinator --tail=30
+kubectl -n banking logs sts/db-a --tail=20</code></pre>
+
+        <h3>۲.۸ آزمون کارکردی از طریق Gateway</h3>
+        <p class="step-label">تونل محلی (در یک ترمینال باز بماند):</p>
+        <pre class="code" tabindex="0"><code>kubectl -n banking port-forward svc/gateway 8080:8080</code></pre>
+        <p class="step-label">در ترمینال دیگر (PowerShell — از <span class="mono">curl.exe</span> استفاده شود، نه aliasِ <span class="mono">curl</span>):</p>
+        <pre class="code" tabindex="0"><code>curl.exe http://127.0.0.1:8080/health
+curl.exe http://127.0.0.1:8080/shard-map</code></pre>
+        <p>
+          پاسخ مورد انتظار:
+          <span class="mono">/health</span>
+          وضعیت سالم Gateway را برمی‌گرداند و
+          <span class="mono">/shard-map</span>
+          برای هر دو
+          <span class="mono">bank-a</span>
+          و
+          <span class="mono">bank-b</span>
+          مقدار
+          <span class="mono">healthy: true</span>
+          نشان می‌دهد. این یعنی DNS سرویس، readiness، و انتخاب upstream توسط Gateway درست
+          است.
+        </p>
+        <p class="step-label">نمونهٔ تراکنش محلی روی shard A (حساب‌های ۱–۱۰۰۰):</p>
+        <pre class="code" tabindex="0"><code>curl.exe -X POST http://127.0.0.1:8080/transaction -H "Content-Type: application/json" -d "{\"action\":\"balance\",\"account\":\"A0500\"}"</code></pre>
+        <p class="step-label">نمونه روی shard B (حساب‌های ۱۰۰۱–۲۰۰۰):</p>
+        <pre class="code" tabindex="0"><code>curl.exe -X POST http://127.0.0.1:8080/transaction -H "Content-Type: application/json" -d "{\"action\":\"balance\",\"account\":\"A1500\"}"</code></pre>
+        <p class="step-label">معادل خالص PowerShell (بدون curl.exe):</p>
+        <pre class="code" tabindex="0"><code>Invoke-RestMethod http://127.0.0.1:8080/health
+Invoke-RestMethod http://127.0.0.1:8080/shard-map
+Invoke-RestMethod http://127.0.0.1:8080/transaction -Method POST -ContentType "application/json" -Body '{"action":"balance","account":"A0500"}'
+Invoke-RestMethod http://127.0.0.1:8080/transaction -Method POST -ContentType "application/json" -Body '{"action":"balance","account":"A1500"}'</code></pre>
+        <p>
+          در پاسخ موفق، فیلد مربوط به replica نام Pod بانک را نشان می‌دهد (مثلاً پیشوند
+          <span class="mono">bank-a-</span>
+          یا
+          <span class="mono">bank-b-</span>).
+          این معیار صحت routing است؛ نه دیاگرام UI قبلی Compose.
+        </p>
+      </section>
+
+      <section id="s3">
+        <h2>۳. Persistence با PersistentVolumeClaim</h2>
+        <p class="pending">
+          این بخش اتصال StatefulSet به PVC، رفتار داده پس از حذف Pod پایگاه‌داده، و تفاوت
+          volume پایدار با storage موقت را مستند می‌کند.
+        </p>
+      </section>
+
+      <section id="s4">
+        <h2>۴. Primary / Standby و Failover</h2>
+        <p class="pending">
+          این بخش replication واقعی PostgreSQL، نقش یک writer در هر shard، سناریوی شکست
+          primary، و شواهد حفظ صحت موجودی را مستند می‌کند.
+        </p>
+      </section>
+
+      <section id="s5">
+        <h2>۵. Probes و Self-Healing</h2>
+        <p class="pending">
+          این بخش تنظیم liveness و readiness، خروج خودکار Pod ناسالم از مسیر Service، و
+          تمایز دسترس‌پذیری اپلیکیشن از دسترس‌پذیری پایگاه‌داده را مستند می‌کند.
+        </p>
+      </section>
+
+      <section id="s6">
+        <h2>۶. ConfigMap، Secret و NetworkPolicy</h2>
+        <p class="pending">
+          این بخش انتقال shard map و اسرار، حداقل یک محدودیت شبکهٔ اجباری، و پایه‌های لاگ و
+          متریک را مستند می‌کند.
+        </p>
+      </section>
+
+      <section id="s7">
+        <h2>۷. Autoscaling با HPA</h2>
+        <p class="pending">
+          این بخش تعریف requests/limits، Horizontal Pod Autoscaler، اعمال بار، و حفظ صحت
+          هم‌زمان با تغییر تعداد replica را مستند می‌کند.
+        </p>
+      </section>
+
+      <section id="s8">
+        <h2>۸. Rolling Update و Rollback</h2>
+        <p class="pending">
+          این بخش به‌روزرسانی زیر بار، rollback، و رفتار درخواست‌های در پرواز را مستند
+          می‌کند.
+        </p>
+      </section>
+
+      <section id="s9">
+        <h2>۹. آزمایش‌های اجباری و شواهد صحت</h2>
+        <p class="pending">
+          این بخش هفت آزمایش اجباری را با شواهد قابل تکرار در سطح پایگاه‌داده و وضعیت
+          تراکنش — نه فقط پاسخ HTTP — مستند می‌کند.
+        </p>
+      </section>
+
+      <section id="s10">
+        <h2>۱۰. محدودیت‌ها و نتایج</h2>
+        <p class="pending">
+          این بخش محدودیت‌های پیاده‌سازی، نتایج مشاهده‌شده، و جمع‌بندی نهایی را خلاصه
+          می‌کند.
+        </p>
+      </section>
+    </div>
+    <script>
+      (function () {
+        document.querySelectorAll("pre.code").forEach(function (pre) {
+          if (pre.parentElement && pre.parentElement.classList.contains("code-block")) return;
+
+          var wrap = document.createElement("div");
+          wrap.className = "code-block";
+          wrap.setAttribute("dir", "ltr");
+          pre.parentNode.insertBefore(wrap, pre);
+          wrap.appendChild(pre);
+
+          var btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "copy-btn";
+          btn.textContent = "Copy";
+          btn.setAttribute("aria-label", "Copy command");
+          wrap.appendChild(btn);
+
+          btn.addEventListener("click", async function () {
+            var text = (pre.innerText || pre.textContent || "").replace(/\n$/, "");
+            try {
+              await navigator.clipboard.writeText(text);
+            } catch (err) {
+              var range = document.createRange();
+              range.selectNodeContents(pre);
+              var sel = window.getSelection();
+              sel.removeAllRanges();
+              sel.addRange(range);
+              document.execCommand("copy");
+              sel.removeAllRanges();
+            }
+            btn.textContent = "Copied";
+            btn.classList.add("copied");
+            setTimeout(function () {
+              btn.textContent = "Copy";
+              btn.classList.remove("copied");
+            }, 1200);
+          });
+        });
+      })();
+    </script>
+  </body>
+</html>
