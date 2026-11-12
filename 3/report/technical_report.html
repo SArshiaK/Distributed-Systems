@@ -1095,9 +1095,95 @@ Invoke-RestMethod http://127.0.0.1:8080/transaction -Method POST -ContentType "a
 
       <section id="s3">
         <h2>۳. Persistence با PersistentVolumeClaim</h2>
-        <p class="pending">
-          این بخش اتصال StatefulSet به PVC، رفتار داده پس از حذف Pod پایگاه‌داده، و تفاوت
-          volume پایدار با storage موقت را مستند می‌کند.
+        <p>
+          پایگاه‌های داده با StatefulSet و
+          <span class="mono">volumeClaimTemplates</span>
+          مستقر شده‌اند. برای هر نمونه یک PVC جدا ساخته می‌شود (مثلاً
+          <span class="mono">data-db-a-0</span>)
+          و به مسیر دادهٔ Postgres mount می‌شود. هدف این بخش اثبات این است که حذف Pod
+          دیتابیس داده را پاک نمی‌کند؛ برخلاف storage موقت مثل
+          <span class="mono">emptyDir</span>
+          که با عمر Pod از بین می‌رود.
+        </p>
+
+        <h3>۳.۱ وضعیت PVC و StatefulSet</h3>
+        <p class="step-label">مشاهدهٔ claimها و اتصال به volume:</p>
+        <pre class="code" tabindex="0"><code>kubectl -n banking get sts,pvc -o wide
+kubectl -n banking describe pvc data-db-a-0</code></pre>
+        <p>
+          در استقرار فعلی هر سه claim در وضعیت
+          <span class="mono">Bound</span>
+          هستند و به StorageClass پیش‌فرض Minikube
+          (<span class="mono">standard</span>)
+          وصل‌اند. نام PVC از الگوی
+          <span class="mono">&lt;claimName&gt;-&lt;podName&gt;</span>
+          می‌آید؛ بنابراین برای
+          <span class="mono">db-a-0</span>
+          نام
+          <span class="mono">data-db-a-0</span>
+          ثابت می‌ماند حتی اگر خود Pod دوباره ساخته شود.
+        </p>
+
+        <h3>۳.۲ آزمایش ماندگاری داده</h3>
+        <p>
+          سناریو: موجودی حساب
+          <span class="mono">A0500</span>
+          را تغییر می‌دهیم، Pod
+          <span class="mono">db-a-0</span>
+          را حذف می‌کنیم، و پس از Ready شدن مجدد همان موجودی را می‌خوانیم. اگر PVC درست
+          کار کند، مقدار بعد از recreate باید همان مقدار بعد از deposit باشد.
+        </p>
+        <p class="step-label">تونل Gateway (ترمینال جدا):</p>
+        <pre class="code" tabindex="0"><code>kubectl -n banking port-forward svc/gateway 8080:8080</code></pre>
+        <p class="step-label">۱) موجودی اولیه و deposit:</p>
+        <pre class="code" tabindex="0"><code>Invoke-RestMethod http://127.0.0.1:8080/transaction -Method POST -ContentType "application/json" -Body '{"action":"balance","account":"A0500"}'
+Invoke-RestMethod http://127.0.0.1:8080/transaction -Method POST -ContentType "application/json" -Body '{"action":"deposit","account":"A0500","amount":50}'
+Invoke-RestMethod http://127.0.0.1:8080/transaction -Method POST -ContentType "application/json" -Body '{"action":"balance","account":"A0500"}'</code></pre>
+        <p class="step-label">۲) حذف Pod دیتابیس shard A و انتظار برای جایگزینی:</p>
+        <pre class="code" tabindex="0"><code>kubectl -n banking delete pod db-a-0
+kubectl -n banking rollout status statefulset/db-a --timeout=120s
+kubectl -n banking get pod db-a-0 -o wide
+kubectl -n banking get pvc data-db-a-0</code></pre>
+        <p class="step-label">۳) خواندن مجدد موجودی:</p>
+        <pre class="code" tabindex="0"><code>Invoke-RestMethod http://127.0.0.1:8080/transaction -Method POST -ContentType "application/json" -Body '{"action":"balance","account":"A0500"}'</code></pre>
+
+        <h3>۳.۳ نتایج مشاهده‌شده</h3>
+        <table class="seq">
+          <thead>
+            <tr>
+              <th>گام</th>
+              <th>نتیجه</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>balance قبل از deposit</td>
+              <td><span class="mono">1000.0</span></td>
+            </tr>
+            <tr>
+              <td>پس از deposit به اندازهٔ ۵۰</td>
+              <td><span class="mono">1050.0</span></td>
+            </tr>
+            <tr>
+              <td>حذف <span class="mono">db-a-0</span></td>
+              <td>StatefulSet Pod جدید ساخت؛ IP عوض شد (مثلاً به <span class="mono">10.244.0.16</span>)</td>
+            </tr>
+            <tr>
+              <td>وضعیت PVC</td>
+              <td>همان <span class="mono">data-db-a-0</span> همچنان <span class="mono">Bound</span> به همان Volume</td>
+            </tr>
+            <tr>
+              <td>balance بعد از recreate</td>
+              <td><span class="mono">1050.0</span> — داده باقی ماند</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>
+          جمع‌بندی: Pod موقتی است و IP عوض می‌شود، اما دیسک پشت PVC پایدار است. به همین
+          دلیل برای پایگاه‌داده StatefulSet+PVC انتخاب شده و برای اپ‌های بدون state محلی،
+          Deployment کافی است. اگر به‌جای PVC از
+          <span class="mono">emptyDir</span>
+          استفاده می‌شد، با حذف Pod موجودی به حالت اولیه برمی‌گشت.
         </p>
       </section>
 
