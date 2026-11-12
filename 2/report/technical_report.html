@@ -370,6 +370,17 @@
         مخزن پروژه:
         <a class="repo-link" href="https://github.com/SArshiaK/Distributed-Systems/tree/main/2" dir="ltr" target="_blank" rel="noopener noreferrer">https://github.com/SArshiaK/Distributed-Systems/tree/main/2</a>
       </p>
+      <p class="meta">
+        به‌جای Docker Hub، همهٔ ایمیج‌های پروژه روی GitHub Container Registry منتشر شده‌اند:
+        <a
+          class="repo-link"
+          href="https://github.com/SArshiaK?tab=packages&amp;repo_name=Distributed-Systems"
+          dir="ltr"
+          target="_blank"
+          rel="noopener noreferrer"
+          >https://github.com/SArshiaK?tab=packages&amp;repo_name=Distributed-Systems</a
+        >
+      </p>
       <p class="lede">
         این گزارش معماری را از یک مسیر سادهٔ درخواست شروع می‌کند و در هر بخش یک لایهٔ
         واقعی سیستم را اضافه می‌کند. در پایان، تصویر کامل سرویس‌ها دیده می‌شود:
@@ -380,7 +391,7 @@
       <nav class="toc" aria-label="فهرست">
         <strong>فهرست مطالب</strong>
         <ol>
-          <li><a href="#s1">مقدمه و پوشش الزامات</a></li>
+          <li><a href="#s1">مقدمه، شبکه و پورت‌ها</a></li>
           <li><a href="#s2">مرحله ۱ — هسته</a></li>
           <li><a href="#s3">مرحله ۲ — Sharding</a></li>
           <li><a href="#s4">مرحله ۳ — Replica و Load Balancing</a></li>
@@ -403,6 +414,77 @@
           بین‌shard با Coordinator و پروتکل Two-Phase Commit هماهنگ می‌شود. کلاینت فقط با
           Gateway حرف می‌زند و از جزئیات shard و replica بی‌خبر است.
         </p>
+
+        <h3>۱.۰ شبکه و پورت‌ها</h3>
+        <p>
+          همهٔ سرویس‌های تعریف‌شده در <span class="mono">docker-compose.yml</span> روی
+          <strong>یک شبکهٔ پیش‌فرض Compose</strong> بالا می‌آیند (نام پروژه
+          <span class="mono">2</span> → شبکهٔ <span class="mono">2_default</span>).
+          شبکهٔ جداگانه‌ای تعریف نشده است؛ بنابراین کانتینرها با
+          <strong>DNS داخلی روی نام سرویس</strong> همدیگر را پیدا می‌کنند
+          (مثلاً <span class="mono">http://gateway:8080</span> یا
+          <span class="mono">postgresql://bank:bank@db-a:5432/bank</span>).
+          ارتباط سرویس‌به‌سرویس از داخل شبکه انجام می‌شود و به پورت میزبان وابسته نیست.
+        </p>
+        <p>
+          پورت داخل کانتینر همان پورت پیش‌فرض اپ است (بانک‌ها
+          <span class="mono">8000</span>، Gateway
+          <span class="mono">8080</span>، و غیره). روی میزبان، برای هر سرویسی که باید از
+          بیرون دیده شود یک پورت یکتا نگاشت شده تا با هم تداخل نکنند و برای UI، تست و
+          دیباگ قابل دسترسی باشند. دیتابیس‌های Postgres به میزبان publish نشده‌اند و فقط
+          داخل همان شبکه روی <span class="mono">5432</span> در دسترس‌اند.
+        </p>
+        <table class="seq">
+          <thead>
+            <tr>
+              <th>سرویس</th>
+              <th>پورت میزبان → داخل</th>
+              <th>نقش</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="mono">bank-a1</span> … <span class="mono">bank-b2</span></td>
+              <td><span class="mono" dir="ltr">8001–8004 → 8000</span></td>
+              <td>replicaهای shard A/B (ترتیب متوالی روی میزبان)</td>
+            </tr>
+            <tr>
+              <td><span class="mono">bank-c1</span> / <span class="mono">bank-c2</span></td>
+              <td><span class="mono" dir="ltr">8005–8006 → 8000</span></td>
+              <td>replicaهای shard C (profile bonus)</td>
+            </tr>
+            <tr>
+              <td><span class="mono">gateway</span></td>
+              <td><span class="mono" dir="ltr">8080 → 8080</span></td>
+              <td>ورود کلاینت / آزمایش‌ها</td>
+            </tr>
+            <tr>
+              <td><span class="mono">coordinator</span></td>
+              <td><span class="mono" dir="ltr">8090 → 8090</span></td>
+              <td>2PC</td>
+            </tr>
+            <tr>
+              <td><span class="mono">migrator</span></td>
+              <td><span class="mono" dir="ltr">8095 → 8095</span></td>
+              <td>Bonus I</td>
+            </tr>
+            <tr>
+              <td><span class="mono">healer</span></td>
+              <td><span class="mono" dir="ltr">8096 → 8096</span></td>
+              <td>Bonus II</td>
+            </tr>
+            <tr>
+              <td><span class="mono">console</span></td>
+              <td><span class="mono" dir="ltr">3030 → 3000</span></td>
+              <td>Lab UI</td>
+            </tr>
+            <tr>
+              <td><span class="mono">db-a/b/c/coord</span></td>
+              <td>بدون publish به میزبان</td>
+              <td>فقط داخل شبکهٔ Compose روی <span class="mono">5432</span></td>
+            </tr>
+          </tbody>
+        </table>
 
         <h3>۱.۱ نگاشت اجزای assignment به پیاده‌سازی</h3>
         <table class="seq">
@@ -829,7 +911,7 @@
         <h2>۷. تصمیم ماندگار، وضعیت‌ها و بازیابی Coordinator</h2>
         <p>
           هر تراکنش توزیع‌شده یک <span class="mono">transaction_id</span> یکتا دارد و در
-          <span class="mono">db-coord</span> با وضعیت‌های استاندارد assignment ذخیره می‌شود:
+          <span class="mono">db-coord</span> با وضعیت‌های استاندارد  ذخیره می‌شود:
           <span class="mono">INITIATED</span>،
           <span class="mono">PREPARING</span>،
           <span class="mono">PREPARED</span>،

@@ -1,5 +1,5 @@
 {
-  "epoch": 1,
+  "epoch": 2,
   "shards": {
     "A": {
       "start": 1,
@@ -7,16 +7,23 @@
       "replicas": [
         "http://bank-a1:8000",
         "http://bank-a2:8000",
-        "http://heal-a-0-g11:8000",
-        "http://heal-a-1-g11:8000"
+        "http://heal-a-1-g13:8000"
       ]
     },
     "B": {
       "start": 1001,
-      "end": 2000,
+      "end": 1500,
       "replicas": [
         "http://bank-b1:8000",
         "http://bank-b2:8000"
+      ]
+    },
+    "C": {
+      "start": 1501,
+      "end": 2000,
+      "replicas": [
+        "http://bank-c1:8000",
+        "http://bank-c2:8000"
       ]
     }
   }
