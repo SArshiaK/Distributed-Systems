@@ -1,0 +1,13 @@
+[01:00:02] === CORE EXPERIMENTS log ? D:\University\3\Distributed Systems\Assignments\3\k8s\scripts\..\..\report\experiment-results\results-20261113-010002.txt ===
+[01:00:02] Gateway health: {"status":"ok","service":"gateway","epoch":1}
+[01:00:02] writers A=db-a-0 B=db-b-0
+[01:00:02] --- Exp1 Application Pod Failure ---
+[01:00:02] balance before: {"status":"success","account":"A0600","balance":1000.0,"request_id":"1ca239ce","client_request_id":"818ff11366b04aa998f2726b4b777ac4","replica_id":"bank-a-64b48f79f4-rs7f7","shard_id":"A","epoch":1,"gateway_replica":"http://bank-a:8000","map_epoch":1}
+[01:00:02] deleting pod bank-a-64b48f79f4-4c77f
+[01:00:07] deposit during heal: {"status":"success","account":"A0600","balance":1010.0,"request_id":"508f8c96","client_request_id":"078bc1a67202449489459151089741dd","replica_id":"bank-a-64b48f79f4-rs7f7","shard_id":"A","epoch":1,"gateway_replica":"http://bank-a:8000","map_epoch":1}
+[01:00:09] DB A0600=1010.00 (expect matches deposit result)
+[01:00:09] pods: bank-a-64b48f79f4-qhpq6=Running true bank-a-64b48f79f4-rs7f7=Running true 
+[01:00:09] --- Exp2 Primary Database Failure (shard B) ---
+[01:00:09] B balance before: {"status":"success","account":"A1500","balance":1001.0,"request_id":"047c6fd4","client_request_id":"1e07de17a1ef4289a201afcaf64ffd96","replica_id":"bank-b-55f7dd9f4c-54f5s","shard_id":"B","epoch":1,"gateway_replica":"http://bank-b:8000","map_epoch":1}
+[01:00:09] deposit on primary: {"status":"success","account":"A1500","balance":1016.0,"request_id":"0ed3d3bb","client_request_id":"a9177656dc1c482f8a2796fef1b1fa77","replica_id":"bank-b-55f7dd9f4c-54f5s","shard_id":"B","epoch":1,"gateway_replica":"http://bank-b:8000","map_epoch":1}
+[01:00:09] standby A1500=1016.00

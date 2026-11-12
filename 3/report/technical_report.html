@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>گزارش فنی · Assignment 3 · Fault-Tolerant Banking on Kubernetes</title>
+    <title>گزارش فنی · Fault-Tolerant Banking on Kubernetes</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -402,11 +402,10 @@
         <button class="print-btn" type="button" onclick="window.print()">چاپ / PDF</button>
       </div>
 
-      <p class="kicker">Distributed Systems · Assignment 3</p>
+      <p class="kicker">Distributed Systems · Kubernetes</p>
       <h1>گزارش فنی بانکداری توزیع‌شدهٔ تحمل‌پذیر خطا روی Kubernetes</h1>
       <p class="meta">
-        مبنا: سیستم Assignment&nbsp;2 (sharding، replica، Gateway، 2PC) · استقرار روی
-        Minikube / Kubernetes
+        sharding · replica · Gateway · 2PC · استقرار روی Minikube / Kubernetes
       </p>
       <p class="lede">
         این گزارش مهاجرت پلتفرم بانکداری توزیع‌شده از Docker Compose به Kubernetes را
@@ -437,14 +436,14 @@
       <section id="s1">
         <h2>۱. معماری و نگاشت به منابع Kubernetes</h2>
         <p>
-          نقطهٔ شروع این پروژه همان پلتفرم Assignment&nbsp;2 است. هدف بخش اول، تثبیت
-          معماری منطقی و تعیین نگاشت دقیق هر جزء به منبع مناسب Kubernetes است تا استقرار
-          بعدی روی یک طرح واحد انجام شود و routing با تعویض Podها نشکند.
+          هدف بخش اول، تثبیت معماری منطقی سیستم بانکداری توزیع‌شده و تعیین نگاشت دقیق هر
+          جزء به منبع مناسب Kubernetes است تا استقرار بعدی روی یک طرح واحد انجام شود و
+          routing با تعویض Podها نشکند.
         </p>
 
-        <h3>۱.۱ اجزای حفظ‌شده از Assignment 2</h3>
+        <h3>۱.۱ قواعد دامنه و مرزهای صحت</h3>
         <p>
-          قواعد دامنه و مرزهای صحت از Assignment&nbsp;2 بدون تغییر منتقل می‌شوند:
+          قواعد دامنه و مرزهای صحت بدون تغییر باقی می‌مانند:
         </p>
         <ul class="clean">
           <li>شاردینگ حساب‌ها: بازهٔ A برابر ۱–۱۰۰۰ و بازهٔ B برابر ۱۰۰۱–۲۰۰۰</li>
@@ -464,11 +463,10 @@
 
         <h3>۱.۲ معماری منطقی</h3>
         <p>
-          معماری منطقی سیستم با Assignment&nbsp;2 یکسان است. کلاینت فقط با Gateway صحبت
-          می‌کند؛ Gateway درخواست‌های محلی را به shard مربوط و درخواست‌های cross-shard را
-          به Coordinator می‌فرستد. هر لایهٔ اپ به پایگاه‌دادهٔ خودش وابسته است. روی
-          Kubernetes، هویت پایدار برای ارتباط داخلی از نام Service گرفته می‌شود، نه از IP
-          موقتی Pod.
+          کلاینت فقط با Gateway صحبت می‌کند؛ Gateway درخواست‌های محلی را به shard مربوط و
+          درخواست‌های cross-shard را به Coordinator می‌فرستد. هر لایهٔ اپ به پایگاه‌دادهٔ
+          خودش وابسته است. روی Kubernetes، هویت پایدار برای ارتباط داخلی از نام Service
+          گرفته می‌شود، نه از IP موقتی Pod.
         </p>
 
         <figure class="figure">
@@ -805,8 +803,7 @@
           <li>workloadهای اپلیکیشن با Deployment؛ پایگاه‌های داده با StatefulSet و PVC</li>
           <li>ارتباط داخلی صرفاً از طریق DNS سرویس Kubernetes</li>
           <li>
-            بازیابی سطح اپلیکیشن با کنترلرهای بومی Kubernetes؛ بدون اتکا به Healer سفارشی
-            Assignment&nbsp;2 در محدودهٔ اصلی
+            بازیابی سطح اپلیکیشن با کنترلرهای بومی Kubernetes (Deployment، probes، Endpoints)
           </li>
         </ul>
       </section>
@@ -818,19 +815,19 @@
           <span class="mono">banking</span>
           با Manifestهای پوشهٔ
           <span class="mono">3/k8s/base</span>
-          مستقر می‌شود. منطق دامنه همان Assignment&nbsp;2 است؛ فقط بستر اجرا از Docker
-          Compose به Kubernetes جابه‌جا شده است. برای اینکه این جابه‌جایی واضح باشد،
-          استک Compose خاموش می‌شود و فقط خوشهٔ Minikube سرویس‌دهی می‌کند.
+          مستقر می‌شود. منطق دامنه بدون تغییر است؛ بستر اجرا از Docker Compose به
+          Kubernetes منتقل شده است. برای جلوگیری از تداخل پورت و ابهام مسیر ترافیک، استک
+          Compose خاموش می‌شود و فقط خوشهٔ Minikube سرویس‌دهی می‌کند.
         </p>
 
-        <h3>۲.۱ خاموش‌کردن استک Compose (Assignment 2)</h3>
+        <h3>۲.۱ خاموش‌کردن استک Compose</h3>
         <p>
           کانتینرهای Compose و Podهای Kubernetes هم‌زمان لازم نیستند. با پایین آوردن
           پروژهٔ Compose، پورت‌های میزبان آزاد می‌شوند و مشخص است که ترافیک از مسیر
           Kubernetes می‌آید. ایمیج‌ها روی دیسک می‌مانند؛ فقط کانتینرهای در حال اجرا متوقف
           می‌شوند.
         </p>
-        <p class="step-label">از پوشهٔ Assignment 2:</p>
+        <p class="step-label">از پوشهٔ پروژهٔ Compose:</p>
         <pre class="code" tabindex="0"><code>cd "d:\University\3\Distributed Systems\Assignments\2"
 docker compose -p 2 --profile bonus down</code></pre>
         <p class="step-label">تأیید اینکه دیگر کانتینر Compose بالا نیست:</p>
@@ -881,11 +878,9 @@ docker compose -p 2 --profile bonus down</code></pre>
           </tbody>
         </table>
         <p>
-          Console مربوط به Assignment&nbsp;2 در محدودهٔ فعلی استقرار نمی‌شود: به Docker
-          socket و شناسه‌های ثابت
+          Console مبتنی بر Docker socket و شناسه‌های ثابت
           <span class="mono">A1/A2/B1/B2</span>
-          وابسته است و هدف این تمرین Kubernetes است، نه بازتولید همان UI. آزمون‌ها از طریق
-          Gateway و
+          در این استقرار استفاده نمی‌شود؛ آزمون‌ها از طریق Gateway و
           <span class="mono">kubectl</span>
           انجام می‌شوند.
         </p>
@@ -929,7 +924,7 @@ minikube image load postgres:16-alpine</code></pre>
             <tr>
               <td><span class="mono">namespace.yaml</span></td>
               <td>Namespace <span class="mono">banking</span></td>
-              <td>جداسازی منابع تمرین از بقیهٔ خوشه</td>
+              <td>جداسازی منابع سیستم از بقیهٔ خوشه</td>
             </tr>
             <tr>
               <td><span class="mono">config.yaml</span></td>
@@ -945,8 +940,8 @@ minikube image load postgres:16-alpine</code></pre>
               <td><span class="mono">bank-a.yaml</span> / <span class="mono">bank-b.yaml</span></td>
               <td>یک Deployment با <span class="mono">replicas: 2</span> + یک Service</td>
               <td>
-                مدل استاندارد Kubernetes؛ دو Pod جدا با نام Compose لازم نیست و هدف تمرین
-                Deployment است نه بازسازی UI
+                مدل استاندارد Kubernetes؛ یک Deployment با دو replica به‌جای دو Pod با نام
+                ثابت Compose
               </td>
             </tr>
             <tr>
@@ -1096,56 +1091,93 @@ Invoke-RestMethod http://127.0.0.1:8080/transaction -Method POST -ContentType "a
       <section id="s3">
         <h2>۳. Persistence با PersistentVolumeClaim</h2>
         <p>
-          پایگاه‌های داده با StatefulSet و
-          <span class="mono">volumeClaimTemplates</span>
-          مستقر شده‌اند. برای هر نمونه یک PVC جدا ساخته می‌شود (مثلاً
-          <span class="mono">data-db-a-0</span>)
-          و به مسیر دادهٔ Postgres mount می‌شود. هدف این بخش اثبات این است که حذف Pod
-          دیتابیس داده را پاک نمی‌کند؛ برخلاف storage موقت مثل
+          لایهٔ اپلیکیشن بانک هیچ state محلی‌ای نگه نمی‌دارد و برای آن Deployment کافی
+          است، چون موجودی حساب‌ها فقط در Postgres معنا دارد. مشکل اینجاست که خود Postgres
+          اگر داده را داخل لایهٔ موقتی کانتینر یا
           <span class="mono">emptyDir</span>
-          که با عمر Pod از بین می‌رود.
+          بنویسد، با هر بار حذف Pod آن داده هم از بین می‌رود. در آن صورت deposit یا
+          transfer که از نظر کلاینت موفق بوده، بعد از recreate دیگر در دیسک نیست و صحت
+          سیستم بانکی از بین می‌رود. بنابراین پایگاه‌های داده باید روی storageای بنشینند که
+          عمرش از عمر Pod جدا باشد.
         </p>
 
-        <h3>۳.۱ وضعیت PVC و StatefulSet</h3>
-        <p class="step-label">مشاهدهٔ claimها و اتصال به volume:</p>
+        <h3>۳.۱ پیاده‌سازی و منطق طراحی</h3>
+        <p>
+          برای رسیدن به این هدف، در فایل‌های
+          <span class="mono">db-a.yaml</span>،
+          <span class="mono">db-b.yaml</span>
+          و
+          <span class="mono">db-coord.yaml</span>
+          هر پایگاه به‌صورت
+          <span class="mono">StatefulSet</span>
+          تعریف شده و به‌جای volume ساده از
+          <span class="mono">volumeClaimTemplates</span>
+          استفاده می‌کند. وقتی StatefulSet بالا می‌آید، Kubernetes برای هر ordinal یک
+          PersistentVolumeClaim جدا می‌سازد؛ مثلاً برای
+          <span class="mono">db-a-0</span>
+          claim با نام پایدار
+          <span class="mono">data-db-a-0</span>
+          ساخته می‌شود و همان volume به مسیر
+          <span class="mono">/var/lib/postgresql/data</span>
+          داخل کانتینر mount می‌گردد. متغیر
+          <span class="mono">PGDATA</span>
+          روی زیردایرکتوری
+          <span class="mono">pgdata</span>
+          تنظیم شده تا entrypoint رسمی ایمیج Postgres بتواند روی volume تازه‌مونت‌شده
+          بدون خطای permission یا دایرکتوری خالی، catalog را مقداردهی اولیه کند.
+        </p>
+        <p>
+          اسکیمای جدول حساب‌ها و seed اولیه از ConfigMapهای
+          <span class="mono">db-init-*</span>
+          به پوشهٔ
+          <span class="mono">/docker-entrypoint-initdb.d</span>
+          mount می‌شود. این اسکریپت‌ها فقط وقتی اجرا می‌شوند که catalog هنوز ساخته نشده
+          باشد؛ یعنی روی PVCای که از قبل داده دارد، دوباره موجودی‌ها را به هزار بازنشانی
+          نمی‌کنند. انتخاب StatefulSet به‌جای Deployment برای پایگاه‌داده دقیقاً به همین
+          دلیل است: نام پایدار Pod، PVC چسبیده به همان ordinal، و رفتار قابل پیش‌بینی هنگام
+          حذف و ساخت مجدد. برای خوشهٔ تک‌نود Minikube،
+          <span class="mono">ReadWriteOnce</span>
+          و StorageClass پیش‌فرض کافی است. خود Deploymentهای bank هیچ PVCای ندارند، چون
+          state آن‌ها در دیتابیس است و باید بتوانند آزادانه scale یا rolling شوند بدون اینکه
+          موجودی را روی دیسک محلی Pod نگه دارند.
+        </p>
+        <pre class="code" tabindex="0"><code>volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 1Gi
+# mountPath: /var/lib/postgresql/data
+# PGDATA=/var/lib/postgresql/data/pgdata</code></pre>
+
+        <h3>۳.۲ نحوهٔ تست ماندگاری</h3>
+        <p>
+          ابتدا باید مطمئن شد PVCها واقعاً ساخته و به Volume وصل شده‌اند. نام claim از
+          الگوی
+          <span class="mono">&lt;claimName&gt;-&lt;podName&gt;</span>
+          می‌آید و بعد از recreate همان claim باید
+          <span class="mono">Bound</span>
+          بماند.
+        </p>
         <pre class="code" tabindex="0"><code>kubectl -n banking get sts,pvc -o wide
 kubectl -n banking describe pvc data-db-a-0</code></pre>
         <p>
-          در استقرار فعلی هر سه claim در وضعیت
-          <span class="mono">Bound</span>
-          هستند و به StorageClass پیش‌فرض Minikube
-          (<span class="mono">standard</span>)
-          وصل‌اند. نام PVC از الگوی
-          <span class="mono">&lt;claimName&gt;-&lt;podName&gt;</span>
-          می‌آید؛ بنابراین برای
-          <span class="mono">db-a-0</span>
-          نام
-          <span class="mono">data-db-a-0</span>
-          ثابت می‌ماند حتی اگر خود Pod دوباره ساخته شود.
+          آزمایش اصلی این است که موجودی را از مسیر Gateway عوض کنیم، Pod دیتابیس را عمداً
+          حذف کنیم، و بعد از Ready شدن مجدد همان موجودی را دوباره بخوانیم. اگر لایهٔ
+          persistence درست پیاده شده باشد، مقدار بعد از recreate باید دقیقاً همان مقدار بعد
+          از deposit باشد؛ فقط IP Pod عوض می‌شود، نه داده روی دیسک.
         </p>
-
-        <h3>۳.۲ آزمایش ماندگاری داده</h3>
-        <p>
-          سناریو: موجودی حساب
-          <span class="mono">A0500</span>
-          را تغییر می‌دهیم، Pod
-          <span class="mono">db-a-0</span>
-          را حذف می‌کنیم، و پس از Ready شدن مجدد همان موجودی را می‌خوانیم. اگر PVC درست
-          کار کند، مقدار بعد از recreate باید همان مقدار بعد از deposit باشد.
-        </p>
-        <p class="step-label">تونل Gateway (ترمینال جدا):</p>
-        <pre class="code" tabindex="0"><code>kubectl -n banking port-forward svc/gateway 8080:8080</code></pre>
-        <p class="step-label">۱) موجودی اولیه و deposit:</p>
-        <pre class="code" tabindex="0"><code>Invoke-RestMethod http://127.0.0.1:8080/transaction -Method POST -ContentType "application/json" -Body '{"action":"balance","account":"A0500"}'
+        <p class="step-label">تونل Gateway (ترمینال جدا) و سپس deposit و حذف Pod:</p>
+        <pre class="code" tabindex="0"><code>kubectl -n banking port-forward svc/gateway 8080:8080
+Invoke-RestMethod http://127.0.0.1:8080/transaction -Method POST -ContentType "application/json" -Body '{"action":"balance","account":"A0500"}'
 Invoke-RestMethod http://127.0.0.1:8080/transaction -Method POST -ContentType "application/json" -Body '{"action":"deposit","account":"A0500","amount":50}'
-Invoke-RestMethod http://127.0.0.1:8080/transaction -Method POST -ContentType "application/json" -Body '{"action":"balance","account":"A0500"}'</code></pre>
-        <p class="step-label">۲) حذف Pod دیتابیس shard A و انتظار برای جایگزینی:</p>
-        <pre class="code" tabindex="0"><code>kubectl -n banking delete pod db-a-0
+kubectl -n banking delete pod db-a-0
 kubectl -n banking rollout status statefulset/db-a --timeout=120s
 kubectl -n banking get pod db-a-0 -o wide
-kubectl -n banking get pvc data-db-a-0</code></pre>
-        <p class="step-label">۳) خواندن مجدد موجودی:</p>
-        <pre class="code" tabindex="0"><code>Invoke-RestMethod http://127.0.0.1:8080/transaction -Method POST -ContentType "application/json" -Body '{"action":"balance","account":"A0500"}'</code></pre>
+kubectl -n banking get pvc data-db-a-0
+Invoke-RestMethod http://127.0.0.1:8080/transaction -Method POST -ContentType "application/json" -Body '{"action":"balance","account":"A0500"}'</code></pre>
 
         <h3>۳.۳ نتایج مشاهده‌شده</h3>
         <table class="seq">
@@ -1189,58 +1221,720 @@ kubectl -n banking get pvc data-db-a-0</code></pre>
 
       <section id="s4">
         <h2>۴. Primary / Standby و Failover</h2>
-        <p class="pending">
-          این بخش replication واقعی PostgreSQL، نقش یک writer در هر shard، سناریوی شکست
-          primary، و شواهد حفظ صحت موجودی را مستند می‌کند.
+        <p>
+          PersistentVolumeClaim فقط عمر داده را از عمر یک Pod جدا می‌کند. اگر خود
+          primary از کار بیفتد یا همان volume موقتاً در دسترس نباشد، سیستم همچنان به یک
+          کپی زنده‌ای نیاز دارد که commitهای قبلی را داشته باشد و بتواند جای writer را
+          بگیرد. به همین خاطر برای هر shard بانک یک primary و یک standby با streaming
+          replication واقعی Postgres پیاده شده است.
+          <span class="mono">db-coord</span>
+          در محدودهٔ هسته تک‌نسخه مانده، چون نقش آن ثبت تصمیم‌های 2PC است و الگوی HA آن
+          جدا از مسیر موجودی حساب‌ها طراحی شده است.
         </p>
+
+        <h3>۴.۱ پیاده‌سازی و منطق طراحی</h3>
+        <p>
+          برای هر shard دو StatefulSet جدا تعریف شده است؛ مثلاً
+          <span class="mono">db-a</span>
+          به‌عنوان primary اولیه و
+          <span class="mono">db-a-standby</span>
+          به‌عنوان replica فیزیکی، و همین الگو برای shard B تکرار می‌شود. جدا نگه‌داشتن
+          این دو STS عمدی است: نقش‌ها، entrypoint، و حتی منطق bootstrap آن‌ها یکی نیست و
+          نمی‌توان با
+          <span class="mono">replicas: 2</span>
+          روی یک StatefulSet واحد، یکی را writer و دیگری را hot standby کرد. primary با
+          آرگومان‌هایی مثل
+          <span class="mono">wal_level=replica</span>،
+          <span class="mono">max_wal_senders</span>
+          و
+          <span class="mono">max_prepared_transactions</span>
+          بالا می‌آید تا هم بتواند WAL را برای standby بفرستد و هم تراکنش‌های prepared مربوط
+          به 2PC را نگه دارد.
+        </p>
+        <p>
+          standby به‌جای entrypoint پیش‌فرض ایمیج Postgres، اسکریپت
+          <span class="mono">standby-entrypoint.sh</span>
+          را از ConfigMap
+          <span class="mono">db-ha-scripts</span>
+          اجرا می‌کند. این اسکریپت صبر می‌کند تا primary آماده شود، روی PVC خالی
+          <span class="mono">pg_basebackup -R</span>
+          می‌گیرد تا یک کپی فیزیکی همراه با تنظیمات replication بسازد، و بعد Postgres را در
+          حالت
+          <span class="mono">hot_standby</span>
+          اجرا می‌کند. نقش
+          <span class="mono">replicator</span>
+          و قوانین
+          <span class="mono">pg_hba</span>
+          با اسکریپت
+          <span class="mono">enable-replication.ps1</span>
+          فقط روی writer فعلی اعمال می‌شوند، چون standby در حالت recovery اجازهٔ ساخت نقش
+          را ندارد.
+        </p>
+        <p>
+          نکتهٔ مهم برای لایهٔ اپ این است که bankها به نام ثابت یک Pod وصل نمی‌شوند.
+          مقدار
+          <span class="mono">DATABASE_URL_A</span>
+          و
+          <span class="mono">DATABASE_URL_B</span>
+          در Secret به Serviceهای
+          <span class="mono">db-a-primary</span>
+          و
+          <span class="mono">db-b-primary</span>
+          اشاره می‌کند؛ این Serviceها با selector روی
+          <span class="mono">role=primary</span>
+          و
+          <span class="mono">shard-db</span>
+          فقط Pod نویسندهٔ فعلی را در Endpoints می‌گذارند. به این ترتیب هنگام failover،
+          به‌جای عوض کردن URL داخل اپ، کافی است label نویسنده جابه‌جا شود. headless
+          Serviceهایی مثل
+          <span class="mono">db-a</span>
+          و
+          <span class="mono">db-a-standby-hl</span>
+          همچنان برای هویت StatefulSet و ارتباط replication باقی مانده‌اند.
+        </p>
+        <p>
+          خود failover با
+          <span class="mono">failover-db.ps1</span>
+          انجام می‌شود: ابتدا StatefulSet مربوط به primary مقیاسش به صفر می‌رسد، سپس روی
+          standby دستور
+          <span class="mono">pg_promote</span>
+          زده می‌شود تا از حالت recovery خارج شود، و در پایان label
+          <span class="mono">role=primary</span>
+          روی همان Pod قرار می‌گیرد تا Service نویسنده به آن اشاره کند. اپ بانک همان URL
+          قبلی را می‌بیند و نیازی به rebuild یا تغییر Secret ندارد. این طراحی یک writer در
+          هر لحظه را حفظ می‌کند تا دو منبع حقیقت برای موجودی‌ها به‌وجود نیاید، و به‌جای کپی
+          دستی جدول‌ها از replication مبتنی بر WAL استفاده می‌کند تا commitهای اخیر با lag
+          کم روی standby دیده شوند.
+        </p>
+
+        <h3>۴.۲ نحوهٔ تست — بررسی replication</h3>
+        <p>
+          قبل از هر failover باید ثابت شود که واقعاً یک جریان streaming بین primary و
+          standby برقرار است و فقط یک Endpoint برای سرویس writer وجود دارد.
+        </p>
+        <p class="step-label">وضعیت Podها و Serviceهای writer:</p>
+        <pre class="code" tabindex="0"><code>kubectl -n banking get pods,sts -l tier=data -o wide
+kubectl -n banking get svc db-a-primary db-b-primary
+kubectl -n banking get endpoints db-a-primary
+kubectl -n banking get endpoints db-b-primary</code></pre>
+        <p class="step-label">۲) فعال‌سازی / تأیید نقش replicator (اگر تازه apply کرده‌اید):</p>
+        <pre class="code" tabindex="0"><code>cd "d:\University\3\Distributed Systems\Assignments\3\k8s"
+.\scripts\enable-replication.ps1</code></pre>
+        <p class="step-label">۳) قبل از failover، روی primary باید streaming دیده شود و standby در recovery باشد. نمونه برای shard B:</p>
+        <pre class="code" tabindex="0"><code>kubectl -n banking exec db-b-0 -- psql -U bank -d bank -c "SELECT client_addr, state, sync_state FROM pg_stat_replication;"
+kubectl -n banking exec db-b-standby-0 -- psql -U bank -d bank -c "SELECT pg_is_in_recovery();"</code></pre>
+        <p>
+          انتظار:
+          <span class="mono">state=streaming</span>
+          و روی standby
+          <span class="mono">pg_is_in_recovery = t</span>.
+          (پس از failover موفق روی A، primary اولیهٔ
+          <span class="mono">db-a-0</span>
+          دیگر وجود ندارد؛ برای چک streaming از B استفاده کنید یا از writer فعلی A.)
+        </p>
+
+        <h3>۴.۳ نحوهٔ تست — Failover primary</h3>
+        <p>
+          برای اثبات صحت failover، ابتدا روی primary می‌نویسیم و همان مقدار را روی standby
+          می‌خوانیم تا همگرایی تأیید شود؛ بعد primary را از مدار خارج و standby را promote
+          می‌کنیم. معیار قبول این است که موجودی بعد از failover از Gateway همان مقدار بعد از
+          deposit باشد و Service نویسنده فقط به Pod promoted اشاره کند.
+        </p>
+        <p class="step-label">تونل Gateway (ترمینال جدا، باز بماند):</p>
+        <pre class="code" tabindex="0"><code>kubectl -n banking port-forward svc/gateway 8080:8080</code></pre>
+        <p class="step-label">نوشتن داده و تأیید همگرایی standby (قبل از failover):</p>
+        <pre class="code" tabindex="0"><code>Invoke-RestMethod http://127.0.0.1:8080/transaction -Method POST -ContentType "application/json" -Body '{"action":"balance","account":"A0500"}'
+Invoke-RestMethod http://127.0.0.1:8080/transaction -Method POST -ContentType "application/json" -Body '{"action":"deposit","account":"A0500","amount":25}'
+kubectl -n banking exec db-a-standby-0 -- psql -U bank -d bank -tAc "SELECT balance FROM accounts WHERE account_id='A0500';"</code></pre>
+        <p class="step-label">اجرای failover و آزمون صحت:</p>
+        <pre class="code" tabindex="0"><code>cd "d:\University\3\Distributed Systems\Assignments\3\k8s"
+.\scripts\failover-db.ps1 -Shard a
+Invoke-RestMethod http://127.0.0.1:8080/transaction -Method POST -ContentType "application/json" -Body '{"action":"balance","account":"A0500"}'
+kubectl -n banking get endpoints db-a-primary
+kubectl -n banking get pods -l shard-db=a --show-labels</code></pre>
+        <p>
+          معیار قبول: موجودی بعد از failover همان مقدار بعد از deposit است؛
+          <span class="mono">db-a-primary</span>
+          به Pod promoted اشاره می‌کند؛ label
+          <span class="mono">role=primary</span>
+          روی writer جدید دیده می‌شود.
+        </p>
+
+        <h3>۴.۴ نتایج ثبت‌شده در این اجرا</h3>
+        <table class="seq">
+          <thead>
+            <tr>
+              <th>گام</th>
+              <th>نتیجه</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>replication A/B قبل از failover</td>
+              <td><span class="mono">streaming / async</span> · standby <span class="mono">pg_is_in_recovery=t</span></td>
+            </tr>
+            <tr>
+              <td>balance قبل از deposit</td>
+              <td><span class="mono">1100.0</span></td>
+            </tr>
+            <tr>
+              <td>پس از deposit +۲۵ روی primary</td>
+              <td><span class="mono">1125.0</span></td>
+            </tr>
+            <tr>
+              <td>همان حساب روی standby</td>
+              <td><span class="mono">1125.00</span></td>
+            </tr>
+            <tr>
+              <td>پس از <span class="mono">failover-db.ps1 -Shard a</span></td>
+              <td>writer = <span class="mono">db-a-standby-0</span> · <span class="mono">sts/db-a</span> = 0 replica</td>
+            </tr>
+            <tr>
+              <td>balance از Gateway بعد از failover</td>
+              <td><span class="mono">1125.0</span> — commit از دست نرفت</td>
+            </tr>
+          </tbody>
+        </table>
       </section>
 
       <section id="s5">
         <h2>۵. Probes و Self-Healing</h2>
-        <p class="pending">
-          این بخش تنظیم liveness و readiness، خروج خودکار Pod ناسالم از مسیر Service، و
-          تمایز دسترس‌پذیری اپلیکیشن از دسترس‌پذیری پایگاه‌داده را مستند می‌کند.
+        <p>
+          در Kubernetes صرف
+          <span class="mono">Running</span>
+          بودن یک کانتینر به‌معنای آماده بودن برای سرویس بانکی نیست. ممکن است فرایند زنده
+          باشد ولی به پایگاه‌داده وصل نشود، یا یک replica بمیرد و ترافیک همچنان به آدرس مرده
+          برود. بنابراین سیستم باید دو چیز را از هم جدا کند: اینکه اپ از نظر شبکه سالم و
+          وابسته به DB آماده است، و اینکه اگر یک Pod از بین رفت کنترلر خودش جایگزین بسازد
+          بدون اینکه کل shard قطع شود.
         </p>
+
+        <h3>۵.۱ پیاده‌سازی و منطق طراحی</h3>
+        <p>
+          در Manifestهای
+          <span class="mono">bank-a</span>
+          و
+          <span class="mono">bank-b</span>
+          — و به همین ترتیب برای gateway و coordinator — دو نوع probe روی
+          <span class="mono">GET /health</span>
+          تعریف شده است. readiness با دورهٔ کوتاه‌تر مشخص می‌کند آیا Pod باید در Endpoints
+          سرویس بماند یا نه؛ اگر این probe شکست بخورد، Pod از چرخهٔ ترافیک خارج می‌شود ولی
+          لزوماً کشته نمی‌شود، و Gateway دیگر درخواست را به آن نمی‌فرستد. liveness با تأخیر
+          اولیه و آستانهٔ کندتر همان مسیر را نگاه می‌کند تا اگر فرایند واقعاً گیر کرد،
+          kubelet کانتینر را restart کند. خود
+          <span class="mono">/health</span>
+          در bank_server به Postgres وصل می‌شود؛ در نتیجه قطع شدن دیتابیس باعث شکست health
+          و NotReady شدن اپ می‌شود، حتی اگر وضعیت Pod هنوز
+          <span class="mono">Running</span>
+          باشد. روی خود Postgres از
+          <span class="mono">pg_isready</span>
+          استفاده شده است.
+        </p>
+        <p>
+          هر shard اپ با
+          <span class="mono">replicas: 2</span>
+          بالا می‌آید تا حذف یک Pod ظرفیت آن shard را به صفر نرساند. بازیابی در این لایه با
+          خود Deployment انجام می‌شود و نیازی به healer سفارشی بیرون از خوشه نیست. هدف
+          طراحی دقیقاً همین تمایز است: در دسترس بودن اپ از در دسترس بودن DB جدا شود، و
+          همزمان با کنترلرهای بومی Kubernetes رفتار قابل پیش‌بینی داشته باشیم.
+        </p>
+        <pre class="code" tabindex="0"><code>readinessProbe:
+  httpGet: { path: /health, port: http }
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+livenessProbe:
+  httpGet: { path: /health, port: http }
+  initialDelaySeconds: 20
+  periodSeconds: 10</code></pre>
+
+        <h3>۵.۲ نحوهٔ تست — حذف یک Pod اپ</h3>
+        <p>
+          در این آزمون فقط یکی از دو Pod بانک حذف می‌شود تا دیده شود replica دیگر سرویس
+          می‌دهد و Deployment بلافاصله جایگزین می‌سازد. Endpoints باید به ترکیب IP جدید
+          به‌روز شود.
+        </p>
+        <p class="step-label">حذف یک Pod و مشاهدهٔ جایگزینی:</p>
+        <pre class="code" tabindex="0"><code>kubectl -n banking get pods -l app=bank-a -o wide
+kubectl -n banking get endpoints bank-a
+$pod = (kubectl -n banking get pods -l app=bank-a -o jsonpath='{.items[0].metadata.name}')
+kubectl -n banking delete pod $pod
+kubectl -n banking get pods -l app=bank-a -o wide
+kubectl -n banking get endpoints bank-a
+kubectl -n banking rollout status deploy/bank-a --timeout=120s</code></pre>
+        <p>
+          نتیجهٔ مورد انتظار این است که در تمام مدت حداقل یک Pod Ready بماند، Pod حذف‌شده
+          جایگزین شود، و فهرست Endpoints سرویس به آدرس‌های سالم جدید به‌روز گردد.
+        </p>
+
+        <h3>۵.۳ نحوهٔ تست — قطع DB و اثر readiness</h3>
+        <p>
+          آزمون دوم تعمداً دیتابیس shard B را قطع می‌کند تا نشان دهد اپ ممکن است Running
+          بماند ولی Ready نشود و از Endpoints خارج گردد. بعد از برگرداندن DB باید Ready و
+          endpoint برگردند. در پایان
+          <span class="mono">enable-replication.ps1</span>
+          دوباره زده می‌شود تا نقش replicator روی primary تازه‌ساخته برقرار بماند.
+        </p>
+        <pre class="code" tabindex="0"><code>kubectl -n banking scale sts/db-b --replicas=0
+Start-Sleep -Seconds 20
+kubectl -n banking get pods -l app=bank-b
+kubectl -n banking get endpoints bank-b
+kubectl -n banking scale sts/db-b --replicas=1
+kubectl -n banking rollout status sts/db-b --timeout=120s
+Start-Sleep -Seconds 15
+kubectl -n banking get pods -l app=bank-b
+kubectl -n banking get endpoints bank-b
+cd "d:\University\3\Distributed Systems\Assignments\3\k8s"
+.\scripts\enable-replication.ps1</code></pre>
+        <p>
+          در عمل هنگام قطع DB، Podهای
+          <span class="mono">bank-b</span>
+          همچنان
+          <span class="mono">Running</span>
+          دیده می‌شوند ولی به
+          <span class="mono">Ready 0/1</span>
+          می‌روند و فهرست Endpoints خالی می‌شود؛ یعنی Service دیگر ترافیک به آن‌ها
+          نمی‌دهد. پس از برگرداندن دیتابیس، Ready و endpoint بازمی‌گردند و نقش replicator
+          دوباره روی writer تنظیم می‌شود.
+        </p>
+
+        <h3>۵.۴ نتایج ثبت‌شده در این اجرا</h3>
+        <table class="seq">
+          <thead>
+            <tr>
+              <th>آزمایش</th>
+              <th>مشاهده</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>حذف یک Pod از bank-a</td>
+              <td>Deployment جایگزین کرد؛ Endpoints از دو IP به ترکیب جدید به‌روز شد</td>
+            </tr>
+            <tr>
+              <td>scale <span class="mono">db-b</span> → 0</td>
+              <td>bank-b = Running ولی NotReady؛ <span class="mono">endpoints bank-b</span> خالی</td>
+            </tr>
+            <tr>
+              <td>scale <span class="mono">db-b</span> → 1</td>
+              <td>حداقل یک bank-b دوباره Ready؛ endpoint برگشت؛ replication B دوباره streaming شد</td>
+            </tr>
+          </tbody>
+        </table>
       </section>
 
       <section id="s6">
         <h2>۶. ConfigMap، Secret و NetworkPolicy</h2>
-        <p class="pending">
-          این بخش انتقال shard map و اسرار، حداقل یک محدودیت شبکهٔ اجباری، و پایه‌های لاگ و
-          متریک را مستند می‌کند.
+        <p>
+          استقرار روی Kubernetes فقط بالا آوردن Pod نیست؛ باید مشخص باشد پیکربندی از کجا
+          می‌آید، اسرار چگونه تزریق می‌شوند، و هر جزء حق دارد با چه کسی حرف بزند. اگر shard
+          map داخل ایمیج پخته شود، هر تغییر routing نیازمند rebuild است. اگر رمز پایگاه در
+          Deployment به‌صورت متن ساده تکرار شود، مدیریت و چرخش آن سخت می‌شود. و اگر هر Pod
+          بتواند به هر پورت دیگری در namespace وصل شود، مرز امنیتی بین Gateway و دیسک
+          دیتابیس عملاً وجود ندارد.
+        </p>
+
+        <h3>۶.۱ پیاده‌سازی ConfigMap و Secret</h3>
+        <p>
+          همهٔ این منابع در
+          <span class="mono">base/config.yaml</span>
+          تعریف و از طریق Kustomize اعمال می‌شوند.
+          <span class="mono">ConfigMap/shard-map</span>
+          فایل JSON مسیر سرویس‌های
+          <span class="mono">bank-a</span>
+          و
+          <span class="mono">bank-b</span>
+          را نگه می‌دارد و به‌صورت volume روی
+          <span class="mono">/config/shard_map.json</span>
+          داخل Gateway و Coordinator mount می‌شود؛ خود کانتینر فقط مسیر فایل را از env
+          می‌گیرد. ConfigMapهای
+          <span class="mono">db-init-*</span>
+          اسکیمای اولیه و seed حساب‌ها را برای اولین راه‌اندازی روی PVC خالی فراهم می‌کنند، و
+          <span class="mono">db-ha-scripts</span>
+          اسکریپت bootstrap standby را جدا از ایمیج رسمی Postgres نگه می‌دارد تا بتوان بدون
+          ساخت ایمیج سفارشی، رفتار replication را نسخه کرد.
+        </p>
+        <p>
+          اسرار و رشته‌های اتصال در
+          <span class="mono">Secret/db-credentials</span>
+          قرار دارند و با
+          <span class="mono">secretKeyRef</span>
+          به env کانتینرها تزریق می‌شوند. مثلاً bank-a فقط
+          <span class="mono">DATABASE_URL_A</span>
+          را می‌گیرد که به
+          <span class="mono">db-a-primary</span>
+          اشاره دارد؛ bank-b و coordinator هم الگوی متناظر خود را دارند. نتیجه این است که
+          تغییر host یا رمز بدون rebuild ایمیج، با ویرایش Secret و یک rollout انجام می‌شود،
+          و محتوای غیرحساس (مثل shard map) از محتوای حساس (مثل password) جدا می‌ماند.
+        </p>
+
+        <h3>۶.۲ پیاده‌سازی NetworkPolicy و مشاهده‌پذیری</h3>
+        <p>
+          در
+          <span class="mono">base/networkpolicy.yaml</span>
+          ابتدا یک سیاست
+          <span class="mono">default-deny-ingress</span>
+          برای تمام Podهای namespace گذاشته شده است؛ یعنی به‌صورت پیش‌فرض هیچ ورودی‌ای مجاز
+          نیست مگر اینکه سیاست دیگری آن را صریحاً باز کند. سپس برای هر نقش، مسیرهای لازم
+          باز می‌شوند: Gateway فقط روی پورت ۸۰۸۰ ورودی می‌پذیرد و خروجی‌اش به bankها و
+          coordinator (به‌علاوه DNS) محدود است؛ bankها فقط از Gateway و coordinator ورودی
+          می‌گیرند و خروجی‌شان فقط به writer همان shard روی پورت ۵۴۳۲ است؛ coordinator از
+          Gateway ورودی می‌گیرد و به bankها و
+          <span class="mono">db-coord</span>
+          وصل می‌شود؛ و پایگاه‌های داده فقط از bank همان shard و peerهای replication همان
+          <span class="mono">shard-db</span>
+          ورودی دارند. مهم‌ترین محدودیت نمایشی این است که Gateway عمداً در فهرست مجاز
+          Postgres نیست، تا حتی در صورت نفوذ به لبه، مسیر مستقیم به دیسک داده بسته بماند.
+        </p>
+        <p>
+          CNI پیش‌فرض Minikube یعنی
+          <span class="mono">kindnet</span>
+          این اشیاء NetworkPolicy را می‌سازد ولی enforce نمی‌کند. برای اینکه محدودیت واقعاً
+          روی نود اعمال شود، اسکریپت
+          <span class="mono">enable-calico.ps1</span>
+          مانیفست Calico را نصب و kindnet را برمی‌دارد تا کنترل‌کنندهٔ سیاست بتواند ترافیک
+          غیرمجاز را قطع کند. در کنار این، مشاهده‌پذیری از چند کانال ساده تأمین شده است:
+          لاگ‌های
+          <span class="mono">kubectl logs</span>
+          برای gateway و bank و coordinator، endpointهای
+          <span class="mono">/health</span>
+          برای آمادگی مسیر،
+          <span class="mono">/transactions/{id}</span>
+          و
+          <span class="mono">/requests/{client_request_id}</span>
+          برای وضعیت تراکنش، و metrics-server برای CPU مورد نیاز HPA.
+        </p>
+
+        <h3>۶.۳ نحوهٔ تست</h3>
+        <p>
+          ابتدا وجود ConfigMap و Secret و محتوای shard map بررسی می‌شود؛ سپس با یک اتصال
+          مستقیم از داخل Pod مشخص می‌شود Gateway به پورت ۵۴۳۲ دیتابیس راه ندارد، در حالی که
+          bank همان shard راه دارد و مسیر عادی بانکی از Gateway همچنان سالم است.
+        </p>
+        <p class="step-label">وجود منابع config:</p>
+        <pre class="code" tabindex="0"><code>kubectl -n banking get cm,secret
+kubectl -n banking describe cm shard-map
+kubectl -n banking get secret db-credentials -o jsonpath="{.data}" </code></pre>
+        <p class="step-label">enforce شبکه (پس از Calico):</p>
+        <pre class="code" tabindex="0"><code>kubectl -n banking get networkpolicy
+kubectl -n banking exec deploy/gateway -- python -c "import socket;s=socket.socket();s.settimeout(2);print(s.connect_ex(('db-b-primary',5432)))"
+kubectl -n banking exec deploy/bank-b -- python -c "import socket;s=socket.socket();s.settimeout(2);print(s.connect_ex(('db-b-primary',5432)))"
+Invoke-RestMethod http://127.0.0.1:8080/health</code></pre>
+        <p>
+          نتیجهٔ ثبت‌شده: gateway →
+          <span class="mono">connect_ex=11</span>
+          (مسدود)، bank-b →
+          <span class="mono">0</span>
+          (مجاز)، در حالی که مسیر عادی بانکی از Gateway همچنان سالم است.
         </p>
       </section>
 
       <section id="s7">
         <h2>۷. Autoscaling با HPA</h2>
-        <p class="pending">
-          این بخش تعریف requests/limits، Horizontal Pod Autoscaler، اعمال بار، و حفظ صحت
-          هم‌زمان با تغییر تعداد replica را مستند می‌کند.
+        <p>
+          تعداد Podهای بانک نباید با یک
+          <span class="mono">kubectl scale</span>
+          دستی و دائمی تنظیم شود. انتظار سیستم این است که وقتی بار واقعی بالا می‌رود
+          خودش ظرفیت اضافه کند، و وقتی بار فروکش کرد دوباره جمع شود، بدون اینکه موجودی
+          حساب‌ها به‌خاطر عوض شدن تعداد replica خراب شود. این فقط وقتی ممکن است که state
+          بانکی بیرون از Pod باشد و کنترلر مقیاس بر اساس متریک منابع کار کند، نه حدس اپراتور.
         </p>
+
+        <h3>۷.۱ پیاده‌سازی و منطق طراحی</h3>
+        <p>
+          روی هر container بانک در Manifest، هم
+          <span class="mono">resources.requests</span>
+          و هم
+          <span class="mono">limits</span>
+          تعریف شده است؛ بدون request، درصد CPU برای HPA معنای پایداری ندارد. فایل
+          <span class="mono">base/hpa.yaml</span>
+          دو شیء
+          <span class="mono">HorizontalPodAutoscaler</span>
+          می‌سازد که به
+          <span class="mono">Deployment/bank-a</span>
+          و
+          <span class="mono">bank-b</span>
+          وصل‌اند. حداقل replica برابر ۲ است تا با نیاز self-healing بخش قبل هم‌خوان بماند،
+          و حداکثر ۵ تا سقف منابع Minikube رعایت شود. هدف utilization متوسط CPU روی ۵۰٪
+          گذاشته شده و رفتار scaleUp نسبت به scaleDown تهاجمی‌تر است تا بار ناگهانی زودتر
+          جذب شود، ولی جمع‌شدن ظرفیت با تأخیر و محافظه‌کاری بیشتری انجام شود و نوسان کوتاه
+          سیستم را بالا و پایین نکند.
+        </p>
+        <p>
+          منبع متریک، addon
+          <span class="mono">metrics-server</span>
+          است که در
+          <span class="mono">apply.ps1</span>
+          فعال می‌شود. برای تولید بار، اسکریپت
+          <span class="mono">load-gateway.ps1</span>
+          چند worker موازی را روی
+          <span class="mono">/transaction</span>
+          می‌فرستد. چون موجودی‌ها در Postgres هستند نه در حافظهٔ Pod، زیاد و کم شدن تعداد
+          replica اپ نباید به‌خودی‌خود موجودی را تغییر دهد؛ همین ویژگی است که اجازه می‌دهد
+          مقیاس‌پذیری و صحت بانکی هم‌زمان معنا داشته باشند.
+        </p>
+        <pre class="code" tabindex="0"><code># خلاصهٔ HPA bank-a
+scaleTargetRef: Deployment/bank-a
+minReplicas: 2
+maxReplicas: 5
+metrics: cpu averageUtilization 50</code></pre>
+
+        <h3>۷.۲ نحوهٔ تست</h3>
+        <p>
+          ابتدا وضعیت HPA در حالت کم‌بار خوانده می‌شود؛ سپس بار مصنوعی اعمال و دیده می‌شود
+          که تعداد replica از حداقل بالاتر می‌رود. در پایان، موجودی یک حساب از Gateway
+          خوانده می‌شود تا ثابت شود scale باعث ناسازگاری داده نشده است.
+        </p>
+        <pre class="code" tabindex="0"><code>kubectl -n banking get hpa
+kubectl -n banking port-forward svc/gateway 8080:8080
+cd "d:\University\3\Distributed Systems\Assignments\3\k8s"
+.\scripts\load-gateway.ps1 -Seconds 80 -Workers 12 -Account A0500 -Action balance
+kubectl -n banking get hpa bank-a
+Invoke-RestMethod http://127.0.0.1:8080/transaction -Method POST -ContentType "application/json" -Body '{"action":"balance","account":"A0500"}'</code></pre>
+        <table class="seq">
+          <thead>
+            <tr>
+              <th>شاخص</th>
+              <th>مقدار مشاهده‌شده</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>قبل از بار</td>
+              <td>replicas=۲ · CPU حدود ۲۴٪</td>
+            </tr>
+            <tr>
+              <td>حین بار (۴۴۰۹ موفق، ۰ شکست)</td>
+              <td>replicas ۲→۴ · CPU لحظه‌ای بسیار بالاتر از هدف ۵۰٪</td>
+            </tr>
+            <tr>
+              <td>صحت بعد از scale</td>
+              <td>خواندن balance از Gateway بدون ناسازگاری موجودی</td>
+            </tr>
+          </tbody>
+        </table>
       </section>
 
       <section id="s8">
         <h2>۸. Rolling Update و Rollback</h2>
-        <p class="pending">
-          این بخش به‌روزرسانی زیر بار، rollback، و رفتار درخواست‌های در پرواز را مستند
-          می‌کند.
+        <p>
+          تغییر نسخهٔ اپ یا تنظیمات آن نباید همهٔ replicaهای یک shard را هم‌زمان خاموش کند.
+          همچنین اگر rollout معیوب از آب درآمد، باید بتوان بدون دستکاری دستی موجودی‌ها به
+          revision قبلی برگشت. چون state بانکی داخل Pod نیست و در Postgres می‌ماند، خود
+          مکانیزم Deployment می‌تواند Podها را یکی‌یکی عوض کند، به شرطی که استراتژی rollout
+          ظرفیت Ready را حفظ کند.
+        </p>
+
+        <h3>۸.۱ پیاده‌سازی و منطق طراحی</h3>
+        <p>
+          در Deploymentهای
+          <span class="mono">bank-a</span>
+          و
+          <span class="mono">bank-b</span>
+          استراتژی
+          <span class="mono">RollingUpdate</span>
+          با
+          <span class="mono">maxUnavailable: 0</span>
+          و
+          <span class="mono">maxSurge: 1</span>
+          صریحاً نوشته شده است. معنای عملی این تنظیم آن است که هنگام آپدیت، ابتدا یک Pod
+          جدید ساخته و Ready می‌شود و بعد یکی از Podهای قدیمی حذف می‌گردد؛ در نتیجه ظرفیت
+          Ready به زیر حداقل تعیین‌شده نمی‌افتد، و همزمان فقط یک واحد اضافی روی منابع
+          Minikube فشار می‌آورد. کلاینت همچنان فقط Service مشترک را می‌بیند و کاری به نام
+          موقتی Podها ندارد.
+        </p>
+        <pre class="code" tabindex="0"><code>strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 0
+    maxSurge: 1</code></pre>
+        <p>
+          برای دموی کنترل‌شده، به‌جای rebuild کامل ایمیج، با
+          <span class="mono">kubectl set env deploy/bank-a DEMO_ROLLING=v2</span>
+          یک تغییر بی‌ضرر در pod template ایجاد می‌شود تا ReplicaSet جدید ساخته شود. اگر
+          این rollout نامطلوب باشد،
+          <span class="mono">kubectl rollout undo</span>
+          همان Deployment را به revision قبلی برمی‌گرداند.
+          <span class="mono">rollout status</span>
+          پیشرفت را نشان می‌دهد و
+          <span class="mono">rollout history</span>
+          تاریخچهٔ revisionها را نگه می‌دارد. این مسیر عمداً از قابلیت بومی کنترلر استفاده
+          می‌کند تا نیاز به اسکریپت بازگردانی دستی Pod نباشد.
+        </p>
+
+        <h3>۸.۲ نحوهٔ تست زیر بار</h3>
+        <p>
+          همزمان با تولید بار روی یک حساب، rollout و سپس rollback اجرا می‌شود. معیار قبول
+          این نیست که هیچ خطای موقت اتصالی دیده نشود — در پنجرهٔ تعویض Pod چنین خطاهایی
+          طبیعی‌اند — بلکه این است که بعد از اتمام عملیات، موجودی در دیتابیس فاسد یا دوبار
+          اعمال نشده باشد.
+        </p>
+        <pre class="code" tabindex="0"><code>.\scripts\load-gateway.ps1 -Seconds 55 -Workers 6 -Account A0900 -Action balance
+kubectl -n banking set env deploy/bank-a DEMO_ROLLING=v2
+kubectl -n banking rollout status deploy/bank-a --timeout=180s
+kubectl -n banking rollout undo deploy/bank-a
+kubectl -n banking rollout status deploy/bank-a --timeout=180s
+kubectl -n banking rollout history deploy/bank-a
+Invoke-RestMethod http://127.0.0.1:8080/transaction -Method POST -ContentType "application/json" -Body '{"action":"balance","account":"A0900"}'</code></pre>
+        <p>
+          در اجرای ثبت‌شده، هم rollout و هم rollback کامل شدند و موجودی A0900 برابر
+          <span class="mono">1000.0</span>
+          ماند. بخشی از درخواست‌های همزمان در همان پنجره خطای موقت گرفتند، اما فساد داده یا
+          اثر تکراری روی موجودی دیده نشد.
         </p>
       </section>
 
       <section id="s9">
         <h2>۹. آزمایش‌های اجباری و شواهد صحت</h2>
-        <p class="pending">
-          این بخش هفت آزمایش اجباری را با شواهد قابل تکرار در سطح پایگاه‌داده و وضعیت
-          تراکنش — نه فقط پاسخ HTTP — مستند می‌کند.
+        <p>
+          هفت آزمایش اجباری برای این طراحی شده‌اند که هر کدام یکی از مکانیزم‌های بخش‌های
+          قبل را زیر فشار یا شکست واقعی بگذارند. معیار قبول فقط پاسخ HTTP نیست؛ موجودی در
+          Postgres و برای انتقال‌های بین‌shard وضعیت ردیف‌های
+          <span class="mono">distributed_transactions</span>
+          در پایگاه
+          <span class="mono">coord</span>
+          هم باید با نتیجهٔ اعلام‌شده هم‌خوان باشد. اجرای خودکار این سناریوها در
+          <span class="mono">scripts/run-core-experiments.ps1</span>
+          و
+          <span class="mono">run-experiments-3to7.ps1</span>
+          آمده و لاگ خام در
+          <span class="mono">report/experiment-results/</span>
+          ذخیره شده است.
         </p>
+
+        <h3>۹.۱ روش اندازه‌گیری</h3>
+        <p>
+          تمام ترافیک کلاینت فقط از Gateway و از طریق
+          <span class="mono">port-forward</span>
+          به پورت ۸۰۸۰ وارد می‌شود تا مسیر واقعی سرویس‌دهی همان مسیری باشد که کاربر خارجی
+          می‌بیند. موجودی مرجع با
+          <span class="mono">psql</span>
+          روی Podی خوانده می‌شود که label
+          <span class="mono">role=primary</span>
+          دارد، نه لزوماً روی نام تاریخی
+          <span class="mono">db-*-0</span>.
+          برای تراکنش‌های توزیع‌شده، وضعیت تصمیم و شرکت‌کنندگان از دیتابیس coordinator
+          خوانده می‌شود. اگر HTTP موفقیت بگوید ولی DB چیز دیگری نشان دهد، آزمایش مردود است.
+        </p>
+
+        <h3>۹.۲ خلاصهٔ نتایج و معنای هر آزمایش</h3>
+        <p>
+          آزمایش ۱ با حذف یک Pod از
+          <span class="mono">bank-a</span>
+          نشان می‌دهد Deployment دو‌نسخه‌ای و به‌روزرسانی Endpoints کافی است تا shard هنگام
+          heal همچنان سرویس بدهد؛ deposit روی A0600 در همان پنجره در DB به
+          <span class="mono">1010.00</span>
+          رسید. آزمایش ۲ با failover واقعی روی shard B ثابت می‌کند streaming standby و
+          Service نویسنده می‌توانند بعد از از دست رفتن primary، موجودی commit‌شده را نگه
+          دارند؛ A1500 قبل و بعد
+          <span class="mono">1016.0</span>
+          ماند. آزمایش ۳ بیست deposit موازی روی یک حساب را اجرا می‌کند تا ایزولاسیون نوشتن
+          از چند replica اپ روی یک Postgres مشترک بررسی شود؛ موجودی نهایی دقیقاً برابر شروع
+          به‌علاوه تعداد موفقیت‌ها شد.
+        </p>
+        <p>
+          آزمایش ۴ Pod مربوط به coordinator را وسط یک transfer بین‌shard حذف می‌کند. هدف
+          این است که تصمیم 2PC روی
+          <span class="mono">db-coord</span>
+          ماندگار بماند و پس از بالا آمدن مجدد، وضعیت درخواست از
+          <span class="mono">/requests/{id}</span>
+          قابل بازیابی باشد؛ در اجرا تصمیم COMMIT ثبت شد و موجودی دو طرف با آن هم‌خوان بود.
+          آزمایش ۵ بار واقعی روی Gateway می‌فرستد تا HPA تعداد replica را از ۲ به ۴ برساند و
+          همزمان موجودی همچنان خوانا بماند. آزمایش ۶ همان بار را هنگام rolling update و
+          rollback نگه می‌دارد تا نشان دهد تعویض Podها موجودی را فاسد نمی‌کند، حتی اگر بخشی
+          از درخواست‌ها موقتاً خطای اتصال بگیرند. آزمایش ۷ یک
+          <span class="mono">client_request_id</span>
+          را دو بار می‌فرستد؛ پاسخ دوم با
+          <span class="mono">idempotent_replay=true</span>
+          و همان شناسهٔ تراکنش برمی‌گردد و اثر مالی فقط یک‌بار در DB دیده می‌شود.
+        </p>
+        <table class="seq">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>آزمایش</th>
+              <th>شواهد ثبت‌شده</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>۱</td>
+              <td>Application Pod Failure</td>
+              <td>deposit حین heal → DB A0600=<span class="mono">1010.00</span></td>
+            </tr>
+            <tr>
+              <td>۲</td>
+              <td>Primary Database Failure</td>
+              <td>A1500 قبل/بعد failover=<span class="mono">1016.0</span></td>
+            </tr>
+            <tr>
+              <td>۳</td>
+              <td>Concurrent Transactions</td>
+              <td>۲۰ deposit موازی → DB=<span class="mono">1020.00</span></td>
+            </tr>
+            <tr>
+              <td>۴</td>
+              <td>Coordinator Interruption</td>
+              <td>COMMIT + <span class="mono">FOUND</span> · موجودی‌های متناظر</td>
+            </tr>
+            <tr>
+              <td>۵</td>
+              <td>Autoscaling Under Load</td>
+              <td>HPA ۲→۴ · ۴۴۰۹ ok / ۰ fail</td>
+            </tr>
+            <tr>
+              <td>۶</td>
+              <td>Rolling Update Under Load</td>
+              <td>rollout/undo کامل · A0900=<span class="mono">1000</span></td>
+            </tr>
+            <tr>
+              <td>۷</td>
+              <td>Repeated Client Requests</td>
+              <td><span class="mono">idempotent_replay</span> · اثر واحد روی DB</td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="step-label">نمونهٔ آزمون idempotency (آزمایش ۷):</p>
+        <pre class="code" tabindex="0"><code>$idem = [guid]::NewGuid().ToString("N")
+$body = @{ action="transfer"; account="A0800"; to_account="A1800"; amount=2; client_request_id=$idem } | ConvertTo-Json
+Invoke-RestMethod http://127.0.0.1:8080/transaction -Method POST -ContentType "application/json" -Body $body
+Invoke-RestMethod http://127.0.0.1:8080/transaction -Method POST -ContentType "application/json" -Body $body
+kubectl -n banking exec db-a-0 -- psql -U bank -d bank -c "SELECT balance FROM accounts WHERE account_id='A0800';"</code></pre>
       </section>
 
       <section id="s10">
         <h2>۱۰. محدودیت‌ها و نتایج</h2>
-        <p class="pending">
-          این بخش محدودیت‌های پیاده‌سازی، نتایج مشاهده‌شده، و جمع‌بندی نهایی را خلاصه
-          می‌کند.
+        <h3>۱۰.۱ آنچه ساخته و اثبات شد</h3>
+        <p>
+          در مجموع، سیستم بانکداری توزیع‌شده با sharding، Gateway و 2PC روی Minikube از روی
+          Manifest قابل بازتولید شد. دادهٔ هر shard پشت PVC ماندگار است، برای shardهای بانک
+          standby با streaming replication و failover مبتنی بر label سرویس writer وجود دارد،
+          و لایهٔ اپ با probes وابسته به DB و Deployment چندنسخه‌ای خودش را ترمیم می‌کند.
+          مقیاس‌پذیری با HPA، آپدیت با RollingUpdate و rollback، و محدودیت شبکهٔ enforce‌شده
+          با Calico — طوری که Gateway به Postgres راه نداشته باشد — همگی پیاده و با شواهد
+          سطح پایگاه‌داده در هفت آزمایش اجباری بررسی شدند.
         </p>
+        <h3>۱۰.۲ محدودیت‌های پیاده‌سازی</h3>
+        <p>
+          failover دیتابیس در این کار نیمه‌خودکار است: اسکریپت promote و جابه‌جایی label را
+          انجام می‌دهد، ولی جایگزین یک اپراتور کامل مثل Patroni نیست. اگر بعد از failover
+          دوباره کل Manifest اعمال شود، ممکن است StatefulSet مربوط به primary قبلی دوباره
+          بالا بیاید و خطر dual-writer ایجاد کند؛ در آن حالت باید standby از روی writer فعلی
+          rebuild شود و فقط یک Pod برچسب
+          <span class="mono">role=primary</span>
+          داشته باشد. روی درایور Docker در ویندوز، NodePort از میزبان پایدار در دسترس نبود و
+          آزمون‌ها با port-forward انجام شدند. همچنین در پنجرهٔ کوتاه rolling update زیر بار
+          بالا، بخشی از درخواست‌ها خطای موقت اتصال می‌گیرند؛ در اجراهای ثبت‌شده فساد موجودی
+          دیده نشد، ولی این خطاهای گذرا بخشی از رفتار واقعی سیستم زیر تعویض Pod هستند.
+          بونوس چند-VM و بازیابی پس از نابودی دائمی ماشین خارج از محدودهٔ این گزارش است.
+        </p>
+        <h3>۱۰.۳ مسیر بازتولید</h3>
+        <pre class="code" tabindex="0"><code>cd "d:\University\3\Distributed Systems\Assignments\3\k8s"
+.\apply.ps1
+.\scripts\enable-calico.ps1
+.\scripts\enable-replication.ps1
+kubectl -n banking port-forward svc/gateway 8080:8080
+.\scripts\run-core-experiments.ps1</code></pre>
       </section>
     </div>
     <script>

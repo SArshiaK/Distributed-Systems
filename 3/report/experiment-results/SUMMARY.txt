@@ -1,0 +1,37 @@
+Core experiments (no bonuses) — recorded results
+================================================
+
+Exp1 Application Pod Failure
+  delete one bank-a pod; deposit A0600 during heal
+  DB A0600 = 1010.00 ; replacement pod Ready
+
+Exp2 Primary Database Failure (shard B)
+  deposit A1500 -> 1016 ; standby synced 1016
+  failover-db.ps1 -Shard b
+  Gateway balance after failover = 1016.0
+
+Exp3 Concurrent Transactions
+  20 parallel +1 deposits on A0700
+  ok=20 ; DB 1020.00 = start 1000 + 20
+
+Exp4 Coordinator Interruption
+  delete coordinator mid cross-shard transfer A0800->A1800 amount 5
+  decision=COMMIT ; /requests/{id}=FOUND
+  DB A0800=995.00 A1800=1005.00
+
+Exp5 Autoscaling Under Load
+  load-gateway 80s / 12 workers / balance A0500
+  ok=4409 fail=0 ; HPA bank-a 2 -> 4
+
+Exp6 Rolling Update Under Load
+  set env DEMO_ROLLING=v2 then rollout undo under load
+  A0900 balance remains 1000.0
+
+Exp7 Repeated Client Requests
+  same client_request_id twice for transfer amount 2
+  second response idempotent_replay=true ; same transaction_id
+  single effect: A0800 -2 / A1800 +2
+
+NetworkPolicy (Calico)
+  gateway -> db-b-primary:5432 connect_ex=11 (denied)
+  bank-b  -> db-b-primary:5432 connect_ex=0  (allowed)

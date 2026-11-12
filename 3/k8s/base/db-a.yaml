@@ -15,6 +15,40 @@ spec:
   selector:
     app: db-a
 ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: db-a-primary
+  namespace: banking
+  labels:
+    app: db-a
+    tier: data
+spec:
+  type: ClusterIP
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+  selector:
+    shard-db: a
+    role: primary
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: db-a-standby-hl
+  namespace: banking
+  labels:
+    app: db-a-standby
+spec:
+  clusterIP: None
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+  selector:
+    app: db-a-standby
+---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -33,6 +67,8 @@ spec:
     metadata:
       labels:
         app: db-a
+        shard-db: a
+        role: primary
         tier: data
     spec:
       containers:
@@ -40,6 +76,14 @@ spec:
           image: postgres:16-alpine
           args:
             - postgres
+            - -c
+            - wal_level=replica
+            - -c
+            - max_wal_senders=16
+            - -c
+            - max_replication_slots=16
+            - -c
+            - hot_standby=on
             - -c
             - max_prepared_transactions=100
           ports:
@@ -69,16 +113,21 @@ spec:
             - name: init
               mountPath: /docker-entrypoint-initdb.d
               readOnly: true
+            - name: scripts
+              mountPath: /ha-scripts
+              readOnly: true
           readinessProbe:
             exec:
               command: ["pg_isready", "-U", "bank", "-d", "bank"]
             initialDelaySeconds: 5
             periodSeconds: 5
+            failureThreshold: 3
           livenessProbe:
             exec:
               command: ["pg_isready", "-U", "bank", "-d", "bank"]
-            initialDelaySeconds: 15
+            initialDelaySeconds: 20
             periodSeconds: 10
+            failureThreshold: 3
           resources:
             requests:
               cpu: 50m
@@ -90,6 +139,97 @@ spec:
         - name: init
           configMap:
             name: db-init-a
+        - name: scripts
+          configMap:
+            name: db-ha-scripts
+            defaultMode: 0755
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: db-a-standby
+  namespace: banking
+  labels:
+    app: db-a-standby
+    tier: data
+spec:
+  serviceName: db-a-standby-hl
+  replicas: 1
+  selector:
+    matchLabels:
+      app: db-a-standby
+  template:
+    metadata:
+      labels:
+        app: db-a-standby
+        shard-db: a
+        role: standby
+        tier: data
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          command: ["/bin/sh", "/ha-scripts/standby-entrypoint.sh"]
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+            - name: PRIMARY_HOST
+              value: db-a-primary
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: POSTGRES_PASSWORD
+            - name: REPLICATION_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: REPLICATION_PASSWORD
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: scripts
+              mountPath: /ha-scripts
+              readOnly: true
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "bank", "-d", "bank"]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "bank", "-d", "bank"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: scripts
+          configMap:
+            name: db-ha-scripts
+            defaultMode: 0755
   volumeClaimTemplates:
     - metadata:
         name: data

@@ -96,6 +96,39 @@ stringData:
   POSTGRES_PASSWORD: bank
   POSTGRES_DB_BANK: bank
   POSTGRES_DB_COORD: coord
-  DATABASE_URL_A: postgresql://bank:bank@db-a:5432/bank
-  DATABASE_URL_B: postgresql://bank:bank@db-b:5432/bank
+  REPLICATION_PASSWORD: repl
+  DATABASE_URL_A: postgresql://bank:bank@db-a-primary:5432/bank
+  DATABASE_URL_B: postgresql://bank:bank@db-b-primary:5432/bank
   DATABASE_URL_COORD: postgresql://bank:bank@db-coord:5432/coord
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: db-ha-scripts
+  namespace: banking
+data:
+  standby-entrypoint.sh: |
+    #!/bin/sh
+    set -eu
+    mkdir -p "$PGDATA"
+    if [ ! -f "$PGDATA/PG_VERSION" ]; then
+      echo "standby: waiting for primary ${PRIMARY_HOST}"
+      until pg_isready -h "$PRIMARY_HOST" -U bank -d bank; do sleep 2; done
+      rm -rf "${PGDATA:?}"/*
+      echo "standby: running pg_basebackup from ${PRIMARY_HOST}"
+      until PGPASSWORD="$REPLICATION_PASSWORD" pg_basebackup \
+        -h "$PRIMARY_HOST" -p 5432 -U replicator -D "$PGDATA" -Fp -Xs -P -R; do
+        echo "standby: basebackup failed, retrying"
+        rm -rf "${PGDATA:?}"/*
+        sleep 3
+      done
+      echo "standby: basebackup complete"
+    fi
+    chown -R postgres:postgres /var/lib/postgresql/data
+    chmod 700 "$PGDATA"
+    exec su-exec postgres postgres \
+      -c hot_standby=on \
+      -c max_wal_senders=16 \
+      -c max_replication_slots=16 \
+      -c max_prepared_transactions=100
+

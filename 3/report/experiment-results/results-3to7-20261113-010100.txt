@@ -1,0 +1,62 @@
+[01:01:00] writers A=db-a-0 B=db-b-standby-0 log=D:\University\3\Distributed Systems\Assignments\3\k8s\scripts\..\..\report\experiment-results\results-3to7-20261113-010100.txt
+[01:01:00] NOTE Exp1/2 already recorded earlier: A0600->1010 after pod kill; A1500->1016 after B failover
+[01:01:00] --- Exp3 Concurrent Transactions ---
+[01:01:01] start balance A0700=1000.0
+[01:01:03] ok_deposits=20 db_balance=1020.00 expected=1020.0 match=True
+[01:01:03] --- Exp4 Coordinator Interruption ---
+[01:01:03] deleting coordinator coordinator-76f89f74db-2wxgb during transfer req=e95f1039362b4f2cb567d9ed4e98152e
+[01:01:03] transfer result: {"status":"success","transaction_id":"a390cafd44e343d9b928c9144c4c0f82","client_request_id":"e95f1039362b4f2cb567d9ed4e98152e","from_account":"A0800","to_account":"A1800","amount":5.0,"mode":"cross_shard","decision":"COMMIT","PSComputerName":"localhost","RunspaceId":"2b4eb1ac-1c1e-4412-9af9-56dfdbf7d11b","PSShowComputerName":false}
+[01:01:19] request status: {"status":"FOUND","client_request_id":"e95f1039362b4f2cb567d9ed4e98152e","transaction_id":"a390cafd44e343d9b928c9144c4c0f82","response":{"mode":"cross_shard","amount":5.0,"status":"success","decision":"COMMIT","to_account":"A1800","from_account":"A0800","transaction_id":"a390cafd44e343d9b928c9144c4c0f82","client_request_id":"e95f1039362b4f2cb567d9ed4e98152e"}}
+[01:01:19] DB A0800=995.00 A1800=1005.00
+[01:01:19] --- Exp5 Autoscaling Under Load ---
+[01:01:19] HPA before: NAME     REFERENCE           TARGETS        MINPODS   MAXPODS   REPLICAS   AGE
+bank-a   Deployment/bank-a   cpu: 24%/50%   2         5         2          11m
+
+[01:01:19] hpa bank-a replicas=2
+[01:01:27] hpa bank-a replicas=2
+[01:01:36] hpa bank-a replicas=2
+[01:01:44] hpa bank-a replicas=2
+[01:01:52] hpa bank-a replicas=2
+[01:02:00] hpa bank-a replicas=2
+[01:02:08] hpa bank-a replicas=2
+[01:02:16] hpa bank-a replicas=2
+[01:02:24] hpa bank-a replicas=4
+[01:02:41] scaled=True maxReplicasSeen=4 final A0500={"status":"success","account":"A0500","balance":1124.0,"request_id":"ac68a00a","client_request_id":"06228067b50c47a1b552f673c18d5355","replica_id":"bank-a-64b48f79f4-q468f","shard_id":"A","epoch":1,"gateway_replica":"http://bank-a:8000","map_epoch":1}
+[01:02:41] HPA after:
+NAME     REFERENCE           TARGETS         MINPODS   MAXPODS   REPLICAS   AGE
+bank-a   Deployment/bank-a   cpu: 402%/50%   2         5         4          12m
+bank-b   Deployment/bank-b   cpu: 20%/50%    2         5         2          12m
+
+[01:02:41] --- Exp6 Rolling Update Under Load ---
+[01:03:17] rollout v2 done
+[01:03:50] rollback done
+[01:03:50] A0900 after rolling/rollback: {"status":"success","account":"A0900","balance":1000.0,"request_id":"8a28b255","client_request_id":"3698552b69b542d3a6cb29f53b0ea165","replica_id":"bank-a-64b48f79f4-9kk9g","shard_id":"A","epoch":1,"gateway_replica":"http://bank-a:8000","map_epoch":1}
+[01:03:50] history:
+deployment.apps/bank-a 
+REVISION  CHANGE-CAUSE
+1         <none>
+2         <none>
+3         <none>
+5         <none>
+6         <none>
+
+
+[01:03:50] --- Exp7 Repeated Client Requests ---
+[01:03:50] first: {"status":"success","transaction_id":"e296081310294ce69a6e8f54dfb83fea","client_request_id":"7279d6897d8b4ab2ae0703fc494db1f3","from_account":"A0800","to_account":"A1800","amount":3.0,"mode":"cross_shard","decision":"COMMIT"}
+[01:03:50] repeat: {"mode":"cross_shard","amount":3.0,"status":"success","decision":"COMMIT","to_account":"A1800","from_account":"A0800","transaction_id":"e296081310294ce69a6e8f54dfb83fea","client_request_id":"7279d6897d8b4ab2ae0703fc494db1f3","idempotent_replay":true}
+[01:03:51] A0800 995.00 -> 995.00 ; A1800 1005.00 -> 1005.00
+[01:03:51] same_tx_id=True single_effect_delta_A=0.00
+[01:03:51] --- NetworkPolicy check ---
+[01:03:51] policies:
+NAME                   POD-SELECTOR      AGE
+bank-a                 app=bank-a        13m
+bank-b                 app=bank-b        13m
+coordinator            app=coordinator   13m
+db-a                   shard-db=a        13m
+db-b                   shard-db=b        13m
+db-coord               app=db-coord      13m
+default-deny-ingress   <none>            13m
+gateway                app=gateway       13m
+
+[01:03:53] gateway->db connect_ex=11 (nonzero=denied) bank->db connect_ex=0 (0=ok)
+[01:03:53] === DONE === D:\University\3\Distributed Systems\Assignments\3\k8s\scripts\..\..\report\experiment-results\results-3to7-20261113-010100.txt

@@ -11,3 +11,5 @@ resources:
   - bank-b.yaml
   - coordinator.yaml
   - gateway.yaml
+  - networkpolicy.yaml
+  - hpa.yaml
