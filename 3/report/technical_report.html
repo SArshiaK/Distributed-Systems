@@ -429,6 +429,7 @@
           <li><a href="#s8">Rolling Update و Rollback</a></li>
           <li><a href="#s9">آزمایش‌های اجباری و شواهد صحت</a></li>
           <li><a href="#s10">محدودیت‌ها و نتایج</a></li>
+          <li><a href="#s11">بونوس ۱: خوشهٔ چند-VM</a></li>
         </ol>
       </nav>
 
@@ -1926,15 +1927,369 @@ kubectl -n banking exec db-a-0 -- psql -U bank -d bank -c "SELECT balance FROM a
           آزمون‌ها با port-forward انجام شدند. همچنین در پنجرهٔ کوتاه rolling update زیر بار
           بالا، بخشی از درخواست‌ها خطای موقت اتصال می‌گیرند؛ در اجراهای ثبت‌شده فساد موجودی
           دیده نشد، ولی این خطاهای گذرا بخشی از رفتار واقعی سیستم زیر تعویض Pod هستند.
-          بونوس چند-VM و بازیابی پس از نابودی دائمی ماشین خارج از محدودهٔ این گزارش است.
+          جزئیات استقرار چند-ماشین در بخش بعد آمده است.
         </p>
-        <h3>۱۰.۳ مسیر بازتولید</h3>
+        <h3>۱۰.۳ مسیر بازتولید هسته (Minikube)</h3>
         <pre class="code" tabindex="0"><code>cd "d:\University\3\Distributed Systems\Assignments\3\k8s"
 .\apply.ps1
 .\scripts\enable-calico.ps1
 .\scripts\enable-replication.ps1
 kubectl -n banking port-forward svc/gateway 8080:8080
 .\scripts\run-core-experiments.ps1</code></pre>
+      </section>
+
+      <section id="s11">
+        <h2>۱۱. بونوس ۱: خوشهٔ چند-VM</h2>
+        <p>
+          هستهٔ سیستم روی Minikube تک‌نود پیاده و آزمایش شد، اما بونوس ۱ می‌خواهد همان
+          بانکداری توزیع‌شده روی یک خوشهٔ واقعی چندماشین اجرا شود: یک control-plane و دو
+          worker، پخش replicaهای اپ بین ورکرها، برای هر shard یک primary ماندگار به‌همراه
+          standby محلی روی همان ورکر و standby دوم روی ورکر دیگر با دیسک مستقل، و در نهایت
+          آزمایش قطع یک ورکر زیر بار بدون فساد موجودی و بدون دو پایگاه writable همزمان.
+          این بخش مسیر ساخت آن خوشه، استقرار اپ، توپولوژی داده، و روش صحت‌سنجی را به‌صورت
+          کامل توضیح می‌دهد. فایل‌های کمکی در
+          <span class="mono">3/k8s/multi-vm/</span>
+          و
+          <span class="mono">3/k8s/multi-vm/bonus1/</span>
+          قرار دارند.
+        </p>
+
+        <h3>۱۱.۱ نقش ماشین‌ها و شبکه</h3>
+        <p>
+          سه ماشین مجازی Ubuntu در VirtualBox با کارت Host-Only در زیربازهٔ
+          <span class="mono">192.168.56.0/24</span>
+          بالا آمدند تا از میزبان ویندوز با SSH قابل دسترسی باشند و بین خودشان هم مسیر
+          مستقیم داشته باشند. نقش‌ها این‌گونه ثابت شد:
+        </p>
+        <table class="seq">
+          <thead>
+            <tr>
+              <th>IP</th>
+              <th>Hostname</th>
+              <th>نقش</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="mono">192.168.56.101</span></td>
+              <td><span class="mono">server-vm</span></td>
+              <td>control-plane</td>
+            </tr>
+            <tr>
+              <td><span class="mono">192.168.56.102</span></td>
+              <td><span class="mono">client-vm</span></td>
+              <td>worker w1</td>
+            </tr>
+            <tr>
+              <td><span class="mono">192.168.56.104</span></td>
+              <td><span class="mono">server-backup</span></td>
+              <td>worker w2</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>
+          روی هر VM دو اینترفیس دیده می‌شود: NAT با آدرس تکراری
+          <span class="mono">10.0.2.15</span>
+          برای اینترنت، و Host-Only روی
+          <span class="mono">enp0s8</span>
+          با آدرس‌های بالا برای ترافیک خوشه. انتخاب درست همین اینترفیس دوم برای kubelet و
+          Flannel حیاتی است؛ در غیر این صورت هر سه نود یک INTERNAL-IP یکسان می‌گیرند و شبکهٔ
+          Pod از کار می‌افتد.
+        </p>
+
+        <h3>۱۱.۲ نصب اجزای Kubernetes روی هر نود</h3>
+        <p>
+          روی هر سه ماشین، به‌جای Docker جداگانه، runtime رسمی‌تر containerd نصب شد و سپس
+          <span class="mono">kubeadm</span>،
+          <span class="mono">kubelet</span>
+          و
+          <span class="mono">kubectl</span>
+          از ریپازیتوری Kubernetes. قبل از نصب باید swap خاموش شود و forwarding IPv4 فعال
+          باشد؛ همچنین بستهٔ
+          <span class="mono">conntrack</span>
+          برای preflightهای kubeadm لازم است. نمونهٔ دستورهای مشترک روی هر نود (پس از
+          <span class="mono">sudo -i</span>):
+        </p>
+        <pre class="code" tabindex="0"><code>swapoff -a
+sed -i '/ swap / s/^/#/' /etc/fstab
+apt-get update -y
+apt-get install -y apt-transport-https ca-certificates curl gpg containerd conntrack
+mkdir -p /etc/containerd
+containerd config default >/etc/containerd/config.toml
+sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
+systemctl enable --now containerd
+curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.31/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.31/deb/ /' >/etc/apt/sources.list.d/kubernetes.list
+apt-get update -y
+apt-get install -y kubelet kubeadm kubectl
+apt-mark hold kubelet kubeadm kubectl
+systemctl enable kubelet
+echo 1 >/proc/sys/net/ipv4/ip_forward
+echo 'net.ipv4.ip_forward=1' >/etc/sysctl.d/k8s.conf
+sysctl --system</code></pre>
+        <p>
+          اگر apt به‌خاطر
+          <span class="mono">unattended-upgrades</span>
+          قفل بود، باید تا آزاد شدن قفل صبر کرد. اگر کلید ریپازیتوری Kubernetes به خاطر DNS
+          دانلود نمی‌شد، تنظیم موقت
+          <span class="mono">nameserver 8.8.8.8</span>
+          در
+          <span class="mono">/etc/resolv.conf</span>
+          مشکل را برطرف کرد.
+        </p>
+
+        <h3>۱۱.۳ ساخت خوشه: init و join</h3>
+        <p>
+          فقط روی control-plane دستور
+          <span class="mono">kubeadm init</span>
+          با آدرس تبلیغ‌شدهٔ Host-Only و CIDR شبکهٔ Pod اجرا شد. سپس Flannel به‌عنوان CNI
+          اعمال گردید و دو ورکر با توکن join به خوشه پیوستند.
+        </p>
+        <pre class="code" tabindex="0"><code># فقط روی 192.168.56.101
+kubeadm init --apiserver-advertise-address=192.168.56.101 --pod-network-cidr=10.244.0.0/16
+export KUBECONFIG=/etc/kubernetes/admin.conf
+kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
+
+# روی هر worker (نمونه؛ توکن در خروجی init چاپ می‌شود)
+kubeadm join 192.168.56.101:6443 --token &lt;TOKEN&gt; \
+  --discovery-token-ca-cert-hash sha256:&lt;HASH&gt;</code></pre>
+        <p>
+          پس از join، هر سه نود Ready بودند ولی INTERNAL-IP همه هنوز
+          <span class="mono">10.0.2.15</span>
+          بود. با تنظیم
+          <span class="mono">KUBELET_EXTRA_ARGS=--node-ip=...</span>
+          روی هر ماشین و restart کردن kubelet، آدرس‌های صحیح Host-Only ثبت شد:
+        </p>
+        <pre class="code" tabindex="0"><code># روی .101 / .102 / .104 به ترتیب:
+echo 'KUBELET_EXTRA_ARGS=--node-ip=192.168.56.101' >/etc/default/kubelet
+# echo 'KUBELET_EXTRA_ARGS=--node-ip=192.168.56.102' >/etc/default/kubelet
+# echo 'KUBELET_EXTRA_ARGS=--node-ip=192.168.56.104' >/etc/default/kubelet
+systemctl daemon-reload
+systemctl restart kubelet
+
+# روی control-plane
+kubectl get nodes -o wide</code></pre>
+        <p>
+          نتیجهٔ مشاهده‌شده:
+          <span class="mono">server-vm</span>
+          با نقش control-plane روی
+          <span class="mono">.101</span>،
+          <span class="mono">client-vm</span>
+          روی
+          <span class="mono">.102</span>
+          و
+          <span class="mono">server-backup</span>
+          روی
+          <span class="mono">.104</span>.
+        </p>
+
+        <h3>۱۱.۴ پایدارسازی Flannel</h3>
+        <p>
+          در ابتدا Podهای کاربری به‌خاطر نبودن
+          <span class="mono">/run/flannel/subnet.env</span>
+          در
+          <span class="mono">ContainerCreating</span>
+          می‌ماندند و DaemonSet Flannel در
+          <span class="mono">CrashLoopBackOff</span>
+          بود. دو علت اصلی پیدا شد: ماژول
+          <span class="mono">br_netfilter</span>
+          لود نشده بود، و Flannel به‌جای کارت Host-Only سراغ اینترفیس NAT می‌رفت. روی هر سه
+          نود ماژول و sysctl مربوط فعال شد و روی DaemonSet آرگومان
+          <span class="mono">--iface=enp0s8</span>
+          اضافه گردید.
+        </p>
+        <pre class="code" tabindex="0"><code># روی هر سه VM
+modprobe br_netfilter
+echo br_netfilter >> /etc/modules-load.d/k8s.conf
+cat >/etc/sysctl.d/k8s-bridge.conf <<'EOF'
+net.bridge.bridge-nf-call-iptables = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+net.ipv4.ip_forward = 1
+EOF
+sysctl --system
+
+# فقط روی control-plane
+kubectl -n kube-flannel patch daemonset kube-flannel-ds --type='json' \
+  -p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--iface=enp0s8"}]'
+kubectl -n kube-flannel delete pods --all
+kubectl -n kube-flannel get pods -o wide</code></pre>
+        <p>
+          پس از این تغییر، هر سه Pod Flannel به حالت
+          <span class="mono">Running 1/1</span>
+          رسیدند و ساخت شبکهٔ Pod برای workloadهای banking ممکن شد.
+        </p>
+
+        <h3>۱۱.۵ انتقال ایمیج‌های محلی و استقرار اپ</h3>
+        <p>
+          برای اینکه نودها مجبور به pull از اینترنت نباشند، ایمیج‌های ازپیش‌ساخته روی میزبان
+          ویندوز با
+          <span class="mono">docker save</span>
+          بسته‌بندی و با
+          <span class="mono">scp</span>
+          به هر سه VM فرستاده شدند، سپس داخل namespace ایمیج Kubernetes با
+          <span class="mono">ctr -n k8s.io images import</span>
+          بارگذاری گردیدند. Manifestهای هسته همان
+          <span class="mono">imagePullPolicy: Never</span>
+          را دارند؛ بنابراین kubelet فقط ایمیج محلی را استفاده می‌کند.
+        </p>
+        <pre class="code" tabindex="0"><code># روی ویندوز
+cd $env:TEMP
+docker save -o banking-images.tar `
+  2-bank-a1:latest 2-bank-b1:latest 2-gateway:latest 2-coordinator:latest postgres:16-alpine
+scp $env:TEMP\banking-images.tar vboxuser@192.168.56.101:~/
+scp $env:TEMP\banking-images.tar vboxuser@192.168.56.102:~/
+scp $env:TEMP\banking-images.tar vboxuser@192.168.56.104:~/
+
+# روی هر VM
+sudo ctr -n k8s.io images import /home/vboxuser/banking-images.tar</code></pre>
+        <p>
+          خوشهٔ kubeadm برخلاف Minikube StorageClass پیش‌فرض ندارد؛ بنابراین
+          local-path-provisioner نصب و به‌عنوان کلاس پیش‌فرض علامت‌گذاری شد تا PVCهای
+          StatefulSetها Bound شوند. سپس مانیفست‌های
+          <span class="mono">3/k8s/base</span>
+          روی control-plane اعمال شدند.
+        </p>
+        <pre class="code" tabindex="0"><code># از ویندوز
+scp -r "d:\University\3\Distributed Systems\Assignments\3\k8s\base" vboxuser@192.168.56.101:~/k8s-base
+
+# روی .101
+export KUBECONFIG=/etc/kubernetes/admin.conf
+kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.30/deploy/local-path-storage.yaml
+kubectl patch storageclass local-path -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
+kubectl apply -k /home/vboxuser/k8s-base
+kubectl get pods -n banking -o wide</code></pre>
+        <p>
+          بعد از Ready شدن Flannel و provisioner، primaryهای Postgres و Deploymentهای bank و
+          gateway و coordinator بالا آمدند. برای standbyها لازم بود نقش
+          <span class="mono">replicator</span>
+          و خطوط
+          <span class="mono">pg_hba</span>
+          روی primary ساخته شود؛ در غیر این صورت
+          <span class="mono">pg_basebackup</span>
+          با خطای
+          <span class="mono">no pg_hba.conf entry for replication</span>
+          شکست می‌خورد. پس از اصلاح و بازسازی PVC standby، هر دو کپی راه دور به حالت
+          streaming رسیدند. صحت مسیر کاربر با port-forward Gateway و خواندن موجودی تأیید شد
+          (<span class="mono">/health</span>
+          و
+          <span class="mono">balance A0500 = 1000.0</span>).
+        </p>
+        <pre class="code" tabindex="0"><code>kubectl -n banking exec db-a-0 -- psql -U bank -d bank -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='replicator') THEN CREATE ROLE replicator WITH REPLICATION LOGIN PASSWORD 'repl'; ELSE ALTER ROLE replicator WITH REPLICATION LOGIN PASSWORD 'repl'; END IF; END \$\$;"
+kubectl -n banking exec db-a-0 -- sh -c "printf '\nhost replication replicator 0.0.0.0/0 md5\nhost all replicator 0.0.0.0/0 md5\n' >> /var/lib/postgresql/data/pgdata/pg_hba.conf"
+kubectl -n banking exec db-a-0 -- psql -U bank -d bank -c "SELECT pg_reload_conf();"
+# همین الگو برای db-b-0
+
+kubectl -n banking port-forward svc/gateway 8080:8080
+# در نشست دیگر:
+curl -s http://127.0.0.1:8080/health
+curl -s -X POST http://127.0.0.1:8080/transaction -H 'Content-Type: application/json' \
+  -d '{"action":"balance","account":"A0500"}'</code></pre>
+
+        <h3>۱۱.۶ توپولوژی بونوس: standby محلی و راه دور</h3>
+        <p>
+          تا اینجا برای هر shard یک primary و یک standby روی ورکر دیگر وجود داشت. بونوس ۱
+          صریحاً می‌خواهد روی همان ورکر primary هم یک standby محلی با storage مستقل باشد، و
+          کپی دوم روی ورکر مقابل بماند. برای این کار نودها label شدند، primary و
+          <span class="mono">db-coord</span>
+          به w1 پین شدند، standbyهای موجود به‌عنوان remote روی w2 ثابت شدند، و دو
+          StatefulSet جدید
+          <span class="mono">db-a-standby-local</span>
+          /
+          <span class="mono">db-b-standby-local</span>
+          با
+          <span class="mono">podAffinity</span>
+          به hostname همان primary اضافه گردیدند. هر standby PVC خودش را دارد؛ بنابراین دیسک
+          محلی و راه دور از هم جدا هستند. هر دو از Service
+          <span class="mono">db-*-primary</span>
+          تغذیه می‌شوند تا در هر لحظه فقط یک writer برای shard وجود داشته باشد. پخش
+          Deploymentهای bank با topologySpread بین دو worker انجام می‌شود. برای backup مستقل
+          از volume زندهٔ Postgres، CronJobهای
+          <span class="mono">backup-db-a</span>
+          و
+          <span class="mono">backup-db-b</span>
+          dump منطقی را روی hostPath
+          <span class="mono">/var/banking-backups</span>
+          روی w1 می‌نویسند.
+        </p>
+        <pre class="code" tabindex="0"><code># از ویندوز
+scp -r "d:\University\3\Distributed Systems\Assignments\3\k8s\multi-vm\bonus1" vboxuser@192.168.56.101:~/
+
+# روی .101
+sed -i 's/\r$//' /home/vboxuser/bonus1/*.sh
+chmod +x /home/vboxuser/bonus1/*.sh
+export KUBECONFIG=/etc/kubernetes/admin.conf
+bash /home/vboxuser/bonus1/apply-bonus1.sh
+bash /home/vboxuser/bonus1/enable-replication.sh
+kubectl -n banking get pods -o wide -l tier=data</code></pre>
+        <p>
+          چینش نهایی داده‌ای که مشاهده شد به این صورت بود: primary و standby محلی هر دو shard
+          روی
+          <span class="mono">client-vm</span>،
+          و standby راه دور هر دو shard روی
+          <span class="mono">server-backup</span>.
+          همه در وضعیت
+          <span class="mono">Ready 1/1</span>
+          بودند.
+        </p>
+        <table class="seq">
+          <thead>
+            <tr>
+              <th>Pod</th>
+              <th>نقش</th>
+              <th>نود</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="mono">db-a-0</span> / <span class="mono">db-b-0</span> / <span class="mono">db-coord-0</span></td>
+              <td>primary</td>
+              <td><span class="mono">client-vm</span> (w1)</td>
+            </tr>
+            <tr>
+              <td><span class="mono">db-a-standby-local-0</span> / <span class="mono">db-b-standby-local-0</span></td>
+              <td>standby محلی</td>
+              <td><span class="mono">client-vm</span> (w1)</td>
+            </tr>
+            <tr>
+              <td><span class="mono">db-a-standby-0</span> / <span class="mono">db-b-standby-0</span></td>
+              <td>standby راه دور</td>
+              <td><span class="mono">server-backup</span> (w2)</td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="step-label">تأیید اینکه هر primary به هر دو standby استریم می‌فرستد:</p>
+        <pre class="code" tabindex="0"><code>kubectl -n banking exec db-a-0 -- psql -U bank -d bank -c "SELECT client_addr,state FROM pg_stat_replication;"
+kubectl -n banking exec db-b-0 -- psql -U bank -d bank -c "SELECT client_addr,state FROM pg_stat_replication;"</code></pre>
+
+        <h3>۱۱.۷ آزمایش قطع ورکر زیر بار</h3>
+        <p>
+          برای نشان دادن تحمل قطع یک worker، اسکریپت
+          <span class="mono">interrupt-worker.sh</span>
+          روی control-plane اجرا می‌شود. این اسکریپت ابتدا موجودی یک حساب آزمایشی را از
+          primary می‌خواند، سپس از داخل Pod Gateway یک حلقهٔ deposit پس‌زمینه روی همان حساب
+          راه می‌اندازد، ورکر
+          <span class="mono">client-vm</span>
+          را cordon و drain می‌کند، وضعیت نودها و Endpoints نویسنده را ثبت می‌کند، و بعد از
+          uncordon منتظر بازگشت زمان‌بندی می‌ماند. معیار قبول این است که در طول و بعد از
+          قطع، برای هر shard بیش از یک Pod با
+          <span class="mono">role=primary</span>
+          دیده نشود، و موجودی حساب آزمایشی نامعتبر یا عقب‌گرد بی‌دلیل نداشته باشد؛ یعنی
+          commitهای موفق از دست نروند و split-brain writer رخ ندهد.
+        </p>
+        <pre class="code" tabindex="0"><code>bash /home/vboxuser/bonus1/interrupt-worker.sh client-vm
+kubectl get nodes -o wide
+kubectl -n banking get pods -o wide
+kubectl -n banking get pods -l role=primary -o wide --show-labels</code></pre>
+
+        <h3>۱۱.۸ جمع‌بندی بونوس ۱</h3>
+        <p>
+          در این بخش یک خوشهٔ سه نودی واقعی جایگزین تک‌نود Minikube شد، بدون اینکه منطق
+          دامنهٔ بانک عوض شود. تفاوت اصلی در لایهٔ زیرساخت است: چند ماشین، CNI پایدار روی
+          اینترفیس Host-Only، ایمیج لوکال، storage provisioner، و توپولوژی دادهٔ
+          primary + standby محلی + standby راه دور با backup جدا. با این چینش، الزام بونوس ۱
+          برای پخش اپ روی دو worker و وجود کپی‌های مستقل داده برآورده می‌شود و آزمایش قطع
+          ورکر مسیر بازیابی روی منابع سالم را نشان می‌دهد.
+        </p>
       </section>
     </div>
     <script>

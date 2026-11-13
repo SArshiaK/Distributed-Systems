@@ -1,0 +1,109 @@
+# Independent recovery backups: nightly logical dump from each primary onto a
+# hostPath on worker w1 (separate from Postgres PVC data volumes).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: db-backup-scripts
+  namespace: banking
+data:
+  backup.sh: |
+    #!/bin/sh
+    set -eu
+    TS=$(date -u +%Y%m%dT%H%M%SZ)
+    mkdir -p /backups
+    echo "backup $SHARD at $TS"
+    PGPASSWORD="$POSTGRES_PASSWORD" pg_dump -h "$PRIMARY_HOST" -U bank -d bank -Fc \
+      -f "/backups/${SHARD}-${TS}.dump"
+    ls -lah /backups | tail -n 20
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: backup-db-a
+  namespace: banking
+spec:
+  schedule: "0 2 * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          nodeSelector:
+            banking-worker: w1
+          restartPolicy: OnFailure
+          containers:
+            - name: backup
+              image: postgres:16-alpine
+              imagePullPolicy: Never
+              command: ["/bin/sh", "/scripts/backup.sh"]
+              env:
+                - name: SHARD
+                  value: A
+                - name: PRIMARY_HOST
+                  value: db-a-primary
+                - name: POSTGRES_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: db-credentials
+                      key: POSTGRES_PASSWORD
+              volumeMounts:
+                - name: scripts
+                  mountPath: /scripts
+                  readOnly: true
+                - name: backups
+                  mountPath: /backups
+          volumes:
+            - name: scripts
+              configMap:
+                name: db-backup-scripts
+                defaultMode: 0755
+            - name: backups
+              hostPath:
+                path: /var/banking-backups/a
+                type: DirectoryOrCreate
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: backup-db-b
+  namespace: banking
+spec:
+  schedule: "5 2 * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          nodeSelector:
+            banking-worker: w1
+          restartPolicy: OnFailure
+          containers:
+            - name: backup
+              image: postgres:16-alpine
+              imagePullPolicy: Never
+              command: ["/bin/sh", "/scripts/backup.sh"]
+              env:
+                - name: SHARD
+                  value: B
+                - name: PRIMARY_HOST
+                  value: db-b-primary
+                - name: POSTGRES_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: db-credentials
+                      key: POSTGRES_PASSWORD
+              volumeMounts:
+                - name: scripts
+                  mountPath: /scripts
+                  readOnly: true
+                - name: backups
+                  mountPath: /backups
+          volumes:
+            - name: scripts
+              configMap:
+                name: db-backup-scripts
+                defaultMode: 0755
+            - name: backups
+              hostPath:
+                path: /var/banking-backups/b
+                type: DirectoryOrCreate

@@ -1,0 +1,231 @@
+# Local standbys: same worker as the shard primary (Bonus I).
+# Remote standbys remain db-a-standby / db-b-standby on the other worker.
+apiVersion: v1
+kind: Service
+metadata:
+  name: db-a-standby-local-hl
+  namespace: banking
+  labels:
+    app: db-a-standby-local
+spec:
+  clusterIP: None
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+  selector:
+    app: db-a-standby-local
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: db-a-standby-local
+  namespace: banking
+  labels:
+    app: db-a-standby-local
+    tier: data
+spec:
+  serviceName: db-a-standby-local-hl
+  replicas: 1
+  selector:
+    matchLabels:
+      app: db-a-standby-local
+  template:
+    metadata:
+      labels:
+        app: db-a-standby-local
+        shard-db: a
+        role: standby
+        standby-scope: local
+        tier: data
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: banking-worker
+                    operator: In
+                    values: ["w1"]
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: db-a
+                  role: primary
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          imagePullPolicy: Never
+          command: ["/bin/sh", "/ha-scripts/standby-entrypoint.sh"]
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+            - name: PRIMARY_HOST
+              value: db-a-primary
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: POSTGRES_PASSWORD
+            - name: REPLICATION_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: REPLICATION_PASSWORD
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: scripts
+              mountPath: /ha-scripts
+              readOnly: true
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "bank", "-d", "bank"]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: scripts
+          configMap:
+            name: db-ha-scripts
+            defaultMode: 0755
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: db-b-standby-local-hl
+  namespace: banking
+  labels:
+    app: db-b-standby-local
+spec:
+  clusterIP: None
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+  selector:
+    app: db-b-standby-local
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: db-b-standby-local
+  namespace: banking
+  labels:
+    app: db-b-standby-local
+    tier: data
+spec:
+  serviceName: db-b-standby-local-hl
+  replicas: 1
+  selector:
+    matchLabels:
+      app: db-b-standby-local
+  template:
+    metadata:
+      labels:
+        app: db-b-standby-local
+        shard-db: b
+        role: standby
+        standby-scope: local
+        tier: data
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: banking-worker
+                    operator: In
+                    values: ["w1"]
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: db-b
+                  role: primary
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          imagePullPolicy: Never
+          command: ["/bin/sh", "/ha-scripts/standby-entrypoint.sh"]
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+            - name: PRIMARY_HOST
+              value: db-b-primary
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: POSTGRES_PASSWORD
+            - name: REPLICATION_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: REPLICATION_PASSWORD
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: scripts
+              mountPath: /ha-scripts
+              readOnly: true
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "bank", "-d", "bank"]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: scripts
+          configMap:
+            name: db-ha-scripts
+            defaultMode: 0755
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi

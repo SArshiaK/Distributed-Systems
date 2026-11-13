@@ -1,0 +1,6 @@
+# Pin shard primaries + coord to worker w1; remote standbys to worker w2.
+# Apply with: kubectl patch ... or kubectl apply of strategic merge via JSON.
+# Prefer the apply-bonus1.sh helper which uses kubectl patch.
+apiVersion: v1
+kind: List
+items: []
